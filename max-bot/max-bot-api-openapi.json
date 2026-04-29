@@ -1,0 +1,4671 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "version": "0.0.1",
+    "title": "Max Bot API",
+    "license": {
+      "name": "Apache 2.0"
+    },
+    "description": "# About\nBot API allows bots to interact with Max. Methods are called by sending HTTPS requests to [platform-api.max.ru](https://platform-api.max.ru) domain.\nBots are third-party applications that use Max features. A bot can legitimately take part in a conversation. It can be achieved through HTTP requests to the Max Bot API.\n\n## Features\nMax bots of the current version are able to:\n- Communicate with users and respond to requests\n- Recommend users complete actions via programmed buttons\n- Request personal data from users (name, short reference, phone number)\nWe'll keep working on expanding bot capabilities in the future.\n\n## Examples\nBots can be used for the following purposes:\n- Providing support, answering frequently asked questions\n- Sending typical information\n- Voting\n- Likes/dislikes\n- Following external links\n- Forwarding a user to a chat/channel\n\n## HTTP verbs\n`GET` &mdash; getting resources, parameters are transmitted via URL\n\n`POST` &mdash; creation of resources (for example, sending new messages)\n\n`PUT` &mdash; editing resources\n\n`DELETE` &mdash; deleting resources\n\n`PATCH` &mdash; patching resources\n\n## HTTP response codes\n`200` &mdash; successful operation\n\n`400` &mdash; invalid request\n\n`401` &mdash; authentication error\n\n`404` &mdash; resource not found\n\n`405` &mdash; method is not allowed\n\n`429` &mdash; the number of requests is exceeded\n\n`503` &mdash; service unavailable\n\n## Resources format\nFor content requests (PUT and POST) and responses, the API uses the JSON format.\nAll strings are UTF-8 encoded.\nDate/time fields are represented as the number of milliseconds that have elapsed since 00:00 January 1, 1970 in the long format. To get it, you can simply multiply the UNIX timestamp by 1000. All date/time fields have a UTC timezone.\n## Error responses\nIn case of an error, the API returns a response with the corresponding HTTP code and JSON with the following fields:\n\n`code` - the string with the error key\n\n`message` - a string describing the error </br>\n\nFor example:\n```bash\n> http https://platform-api.max.ru/chats?access_token={EXAMPLE_TOKEN}\nHTTP / 1.1 403 Forbidden\nCache-Control: no-cache\nConnection: Keep-Alive\nContent-Length: 57\nContent-Type: application / json; charset = utf-8\nSet-Cookie: web_ui_lang = ru; Path = /; Domain = .max.ru; Expires = 2019-03-24T11: 45: 36.500Z\n{\n   \"code\": \"verify.token\",\n   \"message\": \"Invalid access_token\"\n}\n```\n## Receiving notifications\nMax Bot API supports 2 options of receiving notifications on new events for bots:\n- Push notifications via WebHook. To receive data via WebHook, you'll have to [add subscription](https://dev.max.ru/docs-api/methods/POST/subscriptions);\n- Notifications upon request via [long polling](/docs-api/methods/GET/updates) API. All data can be received via long polling **by default** after creating the bot.\n\nBoth methods **cannot** be used simultaneously.\nRefer to the response schema of [GET:/updates](https://dev.max.ru/docs-api/methods/GET/updates) method to check all available types of updates.\n\n### Webhook\nThere is some notes about how we handle webhook subscription:\n1. Sometimes webhook notification cannot be delivered in case when bot server or network is down.\n\n  In such case we well retry delivery in a short period of time (from 30 to 60 seconds) and will do this until get\n  `200 OK` status code from your server, but not longer than **8 hours** (*may change over time*) since update happened.\n\n  We also consider any non `200`-response from server as failed delivery.\n\n2. To protect your bot from unexpected high load we send **no more than 100** notifications per second by default.\n  If you want increase this limit, contact us at [@support](https://max.ru/support).\n\n\nIt should be from one of the following subnets:\n```\n185.16.150.0/30\n185.16.150.84/30\n185.16.150.152/30\n185.16.150.192/30\n```\n\n\n## Message buttons\nYou can program buttons for users answering a bot.\nMax supports the following types of buttons:\n\n`callback` &mdash; sends a notification with payload to a bot (via WebHook or long polling)\n\n`link` &mdash; makes a user to follow a link\n\n`request_contact` &mdash; requests the user permission to access contact information (phone number, short link, email)\n\n`request_geo_location` &mdash; asks user to provide current geo location\n\n`chat` &mdash; creates chat associated with message\n\nTo start create buttons [send message](/docs-api/methods/POST/messages) with `InlineKeyboardAttachment`:\n```json\n{\n  \"text\": \"It is message with inline keyboard\",\n  \"attachments\": [\n    {\n      \"type\": \"inline_keyboard\",\n      \"payload\": {\n        \"buttons\": [\n          [\n            {\n              \"type\": \"callback\",\n              \"text\": \"Press me!\",\n              \"payload\": \"button1 pressed\"\n            }\n          ],\n          [\n            {\n              \"type\": \"chat\",\n              \"text\": \"Discuss\",\n              \"chat_title\": \"Message discussion\"\n            }\n          ]\n        ]\n      }\n    }\n  ]\n}\n```\n### Chat button\nChat button is a button that starts chat assosiated with the current message. It will be **private** chat with a link, bot will be added as administrator by default.\n\nChat will be created as soon as the first user taps on button. Bot will receive `message_chat_created` update.\n\nBot can set title and description of new chat by setting `chat_title` and `chat_description` properties.\n\nWhereas keyboard can contain several `chat`-buttons there is `uuid` property to distinct them between each other.\nIn case you do not pass `uuid` we will generate it. If you edit message, pass `uuid` so we know that this button starts the same chat as before.\n\nChat button also can contain `start_payload` that will be sent to bot as part of `message_chat_created` update.\n\n## Deep linking\nMax supports deep linking mechanism for bots. It allows passing additional payload to the bot on startup.\nDeep link can contain any data encoded into string up to **512** characters long. Longer strings will be omitted and **not** passed to the bot.\n\nEach bot has start link that looks like:\n```\nhttps://max.ru/<botName>?start=<payload>\n```\nAs soon as user clicks on such link we open dialog with bot and send this payload to bot as part of `bot_started` update:\n```json\n{\n    \"update_type\": \"bot_started\",\n    \"timestamp\": 1573226679188,\n    \"chat_id\": 1234567890,\n    \"user\": {\n        \"user_id\": 1234567890,\n        \"name\": \"Boris\",\n        \"username\": \"borisd84\"\n    },\n    \"payload\": \"any data meaningful to bot\"\n}\n```\n\nDeep linking mechanism is supported for iOS version 2.7.0 and Android 2.9.0 and higher.\n\n## Text formatting\n\nMessage text can be improved with basic formatting such as: **strong**, *emphasis*, ~strikethough~, \n<ins>underline</ins>, `code` or link. You can use either markdown-like or HTML formatting.\n\nTo enable text formatting set the `format` property of [NewMessageBody](#tag/new_message_model).\n\n### Max flavored Markdown\nTo enable [Markdown](https://spec.commonmark.org/0.29/) parsing, set the `format` property of [NewMessageBody](#tag/new_message_model) to `markdown`.\n\nWe currently support only the following syntax:\n\n`*empasized*` or `_empasized_` for *italic* text\n\n`**strong**` or `__strong__` for __bold__ text\n\n`~~strikethough~~`  for ~strikethough~ text\n\n`++underline++`  for <ins>underlined</ins> text\n\n``` `code` ``` or ` ```code``` ` for `monospaced` text\n\n`^^important^^` for highlighted text (colored in red, by default)\n\n`[Inline URL](https://dev.max.ru/)` for inline URLs\n\n`[User mention](max://user/%user_id%)` for user mentions without username\n\n`# Header` for header\n\n### HTML support\n\nTo enable HTML parsing, set the `format` property of [NewMessageBody](#tag/new_message_model) to `html`.\n \nOnly the following HTML tags are supported. All others will be stripped:\n\nEmphasized: `<i>` or `<em>`\n\nStrong: `<b>` or `<strong>`\n\nStrikethrough: `<del>` or `<s>`\n\nUnderlined: `<ins>` or `<u>`\n\nLink: `<a href=\"https://dev.max.ru\">Docs</a>`\n\nMonospaced text: `<pre>` or `<code>`\n\nHighlighted text: `<mark>`\n\nHeader: `<h1>`\n\nText formatting is supported for iOS since version 3.1 and Android since 2.20.0.\n\n# Versioning\nAPI models and interface may change over time. To make sure your bot will get the right info, we strongly recommend adding API version number to each request. You can add it as `v` parameter to each HTTP-request. For instance, `v=0.1.2`.\nTo specify the data model version you are getting through WebHook subscription, use the `version` property in the request body of the [subscribe](https://dev.max.ru/docs-api/methods/POST/subscriptions) request.\n\n# Libraries\nWe have developed the official [Java client](https://github.com/tamtam-chat/tamtam-bot-api) and [SDK](https://github.com/tamtam-chat/tamtam-bot-sdk).\n\n# Changelog\nTo see changelog for older versions visit our [GitHub](https://github.com/tamtam-chat/tamtam-bot-api-schema/releases)."
+  },
+  "servers": [
+    {
+      "url": "https://platform-api.max.ru"
+    }
+  ],
+  "security": [
+    {
+      "access_token": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "user_model",
+      "x-displayName": "User",
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/User\"/>\n"
+    },
+    {
+      "name": "chat_model",
+      "x-displayName": "Chat",
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/Chat\"/>\n"
+    },
+    {
+      "name": "message_model",
+      "x-displayName": "Message",
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/Message\"/>\n"
+    },
+    {
+      "name": "new_message_model",
+      "x-displayName": "NewMessageBody",
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/NewMessageBody\"/>\n"
+    },
+    {
+      "name": "update_model",
+      "x-displayName": "Update",
+      "description": "<SchemaDefinition schemaRef=\"#/components/schemas/Update\"/>\n"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Methods",
+      "tags": [
+        "bots",
+        "chats",
+        "messages",
+        "subscriptions",
+        "upload"
+      ]
+    },
+    {
+      "name": "Objects",
+      "tags": [
+        "user_model",
+        "chat_model",
+        "message_model",
+        "new_message_model",
+        "update_model"
+      ]
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "tags": [
+          "bots"
+        ],
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð¾ Ð±Ð¾ÑÐµ",
+        "operationId": "getMyInfo",
+        "description": "ÐÐµÑÐ¾Ð´ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð±Ð¾ÑÐµ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÑÐ¸ÑÑÐµÑÑÑ Ñ Ð¿Ð¾Ð¼Ð¾ÑÑÑ ÑÐ¾ÐºÐµÐ½Ð° Ð´Ð¾ÑÑÑÐ¿Ð° `access_token`. Ð Ð¾ÑÐ²ÐµÑÐµ Ð¿ÑÐ¸ÑÐ¾Ð´Ð¸Ñ [Ð¾Ð±ÑÐµÐºÑ User Ñ Ð²Ð°ÑÐ¸Ð°Ð½ÑÐ¾Ð¼ Ð½Ð°ÑÐ»ÐµÐ´Ð¾Ð²Ð°Ð½Ð¸Ñ BotInfo](/docs-api/objects/User), ÐºÐ¾ÑÐ¾ÑÑÐ¹ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð±Ð¾ÑÐ°, ÐµÐ³Ð¾ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ, Ð½Ð¸ÐºÐ½ÐµÐ¹Ð¼, Ð²ÑÐµÐ¼Ñ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð°ÐºÑÐ¸Ð²Ð½Ð¾ÑÑÐ¸, Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¸ Ð°Ð²Ð°ÑÐ°Ñ (Ð¿ÑÐ¸ Ð½Ð°Ð»Ð¸ÑÐ¸Ð¸)\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/me\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "responses": {
+          "200": {
+            "description": "ÐÐ½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð±Ð¾ÑÐµ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "getChats",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº Ð³ÑÑÐ¿Ð¿Ð¾Ð²ÑÑ ÑÐ°ÑÐ¾Ð², Ð² ÐºÐ¾ÑÐ¾ÑÑÑ ÑÑÐ°ÑÑÐ²Ð¾Ð²Ð°Ð» Ð±Ð¾Ñ, Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÐºÐ°Ð¶Ð´Ð¾Ð¼ ÑÐ°ÑÐµ Ð¸ Ð¼Ð°ÑÐºÐµÑ Ð´Ð»Ñ Ð¿ÐµÑÐµÑÐ¾Ð´Ð° Ðº ÑÐ»ÐµÐ´ÑÑÑÐµÐ¹ ÑÑÑÐ°Ð½Ð¸ÑÐµ ÑÐ¿Ð¸ÑÐºÐ°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ ÑÐ¿Ð¸ÑÐºÐ° Ð²ÑÐµÑ Ð³ÑÑÐ¿Ð¿Ð¾Ð²ÑÑ ÑÐ°ÑÐ¾Ð²",
+        "parameters": [
+          {
+            "description": "ÐÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÑ ÑÐ°ÑÐ¾Ð²",
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ. ÐÐ»Ñ Ð¿ÐµÑÐ²Ð¾Ð¹ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð¿ÐµÑÐµÐ´Ð°Ð¹ÑÐµ `null`",
+            "name": "marker",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/bigint"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ð Ð¾ÑÐ²ÐµÑÐµ Ñ Ð¿Ð°Ð³Ð¸Ð½Ð°ÑÐ¸ÐµÐ¹ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÑÑÑÑ ÑÐ°ÑÑ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "x-opGroup": "chat",
+        "operationId": "getChat",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ Ð¿Ð¾ ÐµÐ³Ð¾ ID\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats/{chatId}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð¾ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ°ÑÐµ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "chats"
+        ],
+        "x-opGroup": "chat",
+        "operationId": "editChat",
+        "description": "ÐÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ ÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°ÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ, Ð²ÐºÐ»ÑÑÐ°Ñ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ, Ð¸ÐºÐ¾Ð½ÐºÑ Ð¸ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X PATCH \"https://platform-api.max.ru/chats/{chatId}\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"icon\": { \"url\": \"https://example.com/image.jpg\" },\n  \"title\": \"ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ ÑÐ°ÑÐ°\",\n  \"notify\": true\n}'\n```",
+        "summary": "ÐÐ·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð¾ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "If success, returns updated chat object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chats"
+        ],
+        "x-opGroup": "chat",
+        "operationId": "deleteChat",
+        "description": "Ð£Ð´Ð°Ð»ÑÐµÑ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ Ð´Ð»Ñ Ð²ÑÐµÑ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð²\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/chats/{chatId}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/actions": {
+      "post": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "sendAction",
+        "description": "ÐÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÑÑ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ ÑÐ°ÐºÐ¸Ðµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ Ð±Ð¾ÑÐ°, ÐºÐ°Ðº Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ: «Ð½Ð°Ð±Ð¾Ñ ÑÐµÐºÑÑÐ°» Ð¸Ð»Ð¸ «Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ° ÑÐ¾ÑÐ¾»\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X POST \"https://platform-api.max.ru/chats/{chatId}/actions\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"action\": \"typing_on\"\n}'\n```",
+        "summary": "ÐÑÐ¿ÑÐ°Ð²ÐºÐ° Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ Ð±Ð¾ÑÐ° Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/pin": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "getPinnedMessage",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats/{chatId}/pin\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPinnedMessageResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "pinMessage",
+        "description": "ÐÐ°ÐºÑÐµÐ¿Ð»ÑÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X PUT \"https://platform-api.max.ru/chats/{chatId}/pin\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"message_id\": \"{message_id}\",\n  \"notify\": true\n}'\n```",
+        "summary": "ÐÐ°ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð±ÑÑÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "unpinMessage",
+        "description": "Ð£Ð´Ð°Ð»ÑÐµÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/chats/{chatId}/pin\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°, Ð¸Ð· ÐºÐ¾ÑÐ¾ÑÐ¾Ð³Ð¾ Ð½ÑÐ¶Ð½Ð¾ ÑÐ´Ð°Ð»Ð¸ÑÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/members/me": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "x-opGroup": "myMembership",
+        "operationId": "getMembership",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð¾ ÑÐ»ÐµÐ½ÑÑÐ²Ðµ Ð±Ð¾ÑÐ° Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ»ÐµÐ½ÑÑÐ²Ðµ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð±Ð¾ÑÐ° Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ. ÐÐ¾Ñ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÑÐ¸ÑÑÐµÑÑÑ Ñ Ð¿Ð¾Ð¼Ð¾ÑÑÑ ÑÐ¾ÐºÐµÐ½Ð° Ð´Ð¾ÑÑÑÐ¿Ð°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats/{chatId}/members/me\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ð¢ÐµÐºÑÑÐ°ÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ»ÐµÐ½ÑÑÐ²Ðµ Ð±Ð¾ÑÐ°",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMember"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "leaveChat",
+        "x-opGroup": "myMembership",
+        "summary": "Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð±Ð¾ÑÐ° Ð¸Ð· Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "description": "Ð£Ð´Ð°Ð»ÑÐµÑ Ð±Ð¾ÑÐ° Ð¸Ð· ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/chats/{chatId}/members/me\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/members/admins": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "getAdmins",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ ÑÐ¿Ð¸ÑÐºÐ° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº Ð²ÑÐµÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°. ÐÐ¾Ñ Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð±ÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼ Ð² Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼Ð¾Ð¼ ÑÐ°ÑÐµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats/{chatId}/members/admins\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð²",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMembersList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "setAdmins",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ `true`, ÐµÑÐ»Ð¸ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ñ Ð²ÑÐµ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÑ \n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X POST \"https://platform-api.max.ru/chats/{chatId}/members/admins\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"admins\": [\n    {\n      \"user_id\": \"{user_id}\",\n      \"permissions\": [\n        \"read_all_messages\",\n        \"add_remove_members\",\n        \"add_admins\",\n        \"change_chat_info\",\n        \"pin_message\",\n        \"write\"\n      ],\n      \"alias\": \"Admin\"\n    }\n  ]\n}'\n```",
+        "summary": "ÐÐ°Ð·Ð½Ð°ÑÐ¸ÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ° Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAdminsList"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/members/admins/{userId}": {
+      "delete": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "deleteAdmin",
+        "description": "ÐÑÐ¼ÐµÐ½ÑÐµÑ Ð¿ÑÐ°Ð²Ð° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ° Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ, Ð»Ð¸ÑÐ°Ñ ÐµÐ³Ð¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¸Ð²Ð½ÑÑ Ð¿ÑÐ¸Ð²Ð¸Ð»ÐµÐ³Ð¸Ð¹\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/chats/{chatId}/members/admins/{userId}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÑÐ¼ÐµÐ½Ð¸ÑÑ Ð¿ÑÐ°Ð²Ð° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ° Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          },
+          {
+            "name": "userId",
+            "description": "ÐÐ´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/chats/{chatId}/members": {
+      "get": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "getMembers",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/chats/{chatId}/members\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          },
+          {
+            "name": "user_ids",
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹, ÑÑÐµ ÑÐ»ÐµÐ½ÑÑÐ²Ð¾ Ð½ÑÐ¶Ð½Ð¾ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ. ÐÐ¾Ð³Ð´Ð° ÑÑÐ¾Ñ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑ Ð¿ÐµÑÐµÐ´Ð°Ð½, Ð¿Ð°ÑÐ°Ð¼ÐµÑÑÑ `count` Ð¸ `marker` Ð¸Ð³Ð½Ð¾ÑÐ¸ÑÑÑÑÑÑ",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "nullable": true
+            },
+            "style": "simple"
+          },
+          {
+            "name": "marker",
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "count",
+            "description": "ÐÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð², ÐºÐ¾ÑÐ¾ÑÑÑ Ð½ÑÐ¶Ð½Ð¾ Ð²ÐµÑÐ½ÑÑÑ",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": "20"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð¸ ÑÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMembersList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "addMembers",
+        "description": "ÐÐ¾Ð±Ð°Ð²Ð»ÑÐµÑ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ. ÐÐ»Ñ ÑÑÐ¾Ð³Ð¾ Ð¼Ð¾Ð³ÑÑ Ð¿Ð¾ÑÑÐµÐ±Ð¾Ð²Ð°ÑÑÑÑ Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½ÑÐµ Ð¿ÑÐ°Ð²Ð°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X POST \"https://platform-api.max.ru/chats/{chatId}/members\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"user_ids\": [\"{user_id_1}\", \"{user_id_2}\"]\n}'\n```",
+        "summary": "ÐÐ¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIdsList"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ð ÐµÐ·ÑÐ»ÑÑÐ°Ñ Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ð½Ð° Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ ÑÐ¿Ð¸ÑÐºÐ° ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² ÑÐ°ÑÐ°",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifyMembersResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chats"
+        ],
+        "operationId": "removeMember",
+        "description": "Ð£Ð´Ð°Ð»ÑÐµÑ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ° Ð¸Ð· Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°. ÐÐ»Ñ ÑÑÐ¾Ð³Ð¾ Ð¼Ð¾Ð³ÑÑ Ð¿Ð¾ÑÑÐµÐ±Ð¾Ð²Ð°ÑÑÑÑ Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½ÑÐµ Ð¿ÑÐ°Ð²Ð°\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/chats/{chatId}/members?user_id={user_id}&block=true\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ° Ð¸Ð· Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ°",
+        "parameters": [
+          {
+            "name": "chatId",
+            "description": "ID ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "pattern": "\\-?\\d+"
+            }
+          },
+          {
+            "name": "user_id",
+            "description": " ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÐ¾Ð³Ð¾ Ð½ÑÐ¶Ð½Ð¾ ÑÐ´Ð°Ð»Ð¸ÑÑ Ð¸Ð· ÑÐ°ÑÐ°",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "block",
+            "description": "ÐÑÐ»Ð¸ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð² `true`, Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð±ÑÐ´ÐµÑ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸ÑÐ¾Ð²Ð°Ð½ Ð² ÑÐ°ÑÐµ. ÐÑÐ¸Ð¼ÐµÐ½ÑÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ ÑÐ°ÑÐ¾Ð² Ñ Ð¿ÑÐ±Ð»Ð¸ÑÐ½Ð¾Ð¹ Ð¸Ð»Ð¸ Ð¿ÑÐ¸Ð²Ð°ÑÐ½Ð¾Ð¹ ÑÑÑÐ»ÐºÐ¾Ð¹. ÐÐ³Ð½Ð¾ÑÐ¸ÑÑÐµÑÑÑ Ð² Ð¾ÑÑÐ°Ð»ÑÐ½ÑÑ ÑÐ»ÑÑÐ°ÑÑ",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/subscriptions": {
+      "get": {
+        "tags": [
+          "subscriptions"
+        ],
+        "operationId": "getSubscriptions",
+        "description": "ÐÑÐ»Ð¸ Ð²Ð°Ñ Ð±Ð¾Ñ Ð¿Ð¾Ð»ÑÑÐ°ÐµÑ Ð´Ð°Ð½Ð½ÑÐµ ÑÐµÑÐµÐ· Webhook, ÑÑÐ¾Ñ Ð¼ÐµÑÐ¾Ð´ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº Ð²ÑÐµÑ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¾Ðº. ÐÑÐ¸ Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÐµ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ð¹ Ð´Ð»Ñ production-Ð¾ÐºÑÑÐ¶ÐµÐ½Ð¸Ñ ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Webhook\n\n>ÐÐ±ÑÐ°ÑÐ¸ÑÐµ Ð²Ð½Ð¸Ð¼Ð°Ð½Ð¸Ðµ: Ð´Ð»Ñ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¸ Ð²ÐµÐ±ÑÑÐºÐ¾Ð² Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¾ÑÐ¾ÐºÐ¾Ð» HTTPS, Ð²ÐºÐ»ÑÑÐ°Ñ ÑÐ°Ð¼Ð¾Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ°Ð½Ð½ÑÐµ ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÑ. HTTP Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/subscriptions\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¾Ðº",
+        "responses": {
+          "200": {
+            "description": "ÐÐ¶Ð¸Ð´Ð°ÐµÐ¼ÑÐ¹ ÑÐµÐ·ÑÐ»ÑÑÐ°Ñ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionsResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "subscriptions"
+        ],
+        "operationId": "subscribe",
+        "description": "ÐÐµÑÐ¾Ð´ Ð½Ð°ÑÑÑÐ°Ð¸Ð²Ð°ÐµÑ Ð´Ð¾ÑÑÐ°Ð²ÐºÑ ÑÐ¾Ð±ÑÑÐ¸Ð¹ Ð±Ð¾ÑÐ° ÑÐµÑÐµÐ· Webhook â Ð¾ÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ Ð¼ÐµÑÐ°Ð½Ð¸Ð·Ð¼ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ ÑÐ¾Ð±ÑÑÐ¸Ð¹ Ð² Ð¿ÑÐ¾Ð´ÑÐºÑÐ¾Ð²ÑÑ Ð¸Ð½ÑÐµÐ³ÑÐ°ÑÐ¸ÑÑ. ÐÑÐ¸ Ð°ÐºÑÐ¸Ð²Ð½Ð¾Ð¹ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐµ Long Polling Ð½Ðµ ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ\n\n## ÐÐ¾Ð´ÐµÐ»Ñ Ð´Ð¾ÑÑÐ°Ð²ÐºÐ¸ ÑÐ¾Ð±ÑÑÐ¸Ð¹\n\nÐÐ¾ÑÐ»Ðµ Ð²ÑÐ·Ð¾Ð²Ð° Ð¼ÐµÑÐ¾Ð´Ð° ÑÐ¾Ð±ÑÑÐ¸Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÑÑÑÑ Ð½Ð° ÑÐºÐ°Ð·Ð°Ð½Ð½ÑÐ¹ Webhook-endpoint Ð² Ð²Ð¸Ð´Ðµ HTTPS POST-Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð² Ñ Ð¾Ð±ÑÐµÐºÑÐ¾Ð¼ [`Update`](https://dev.max.ru/docs-api/objects/Update)\n\nÐÐ°Ðº Ð¾Ð±ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÐµÑÑÑ ÑÐ¾Ð±ÑÑÐ¸Ðµ:\n\n1. ÐÑÐ¸ Ð½Ð°ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ð¸ ÑÐ¾Ð±ÑÑÐ¸Ñ Ð²ÑÐ¿Ð¾Ð»Ð½ÑÐµÑÑÑ Ð²ÑÐ·Ð¾Ð² Webhook-endpoint\n2. ÐÑÐ¿Ð¾Ð»Ð½ÑÐµÑÑÑ TLS-Ð²Ð°Ð»Ð¸Ð´Ð°ÑÐ¸Ñ ÑÐµÐ»ÐµÐ²Ð¾Ð³Ð¾ endpoint Ð´Ð»Ñ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾Ð¹ Ð¿ÐµÑÐµÐ´Ð°ÑÐ¸ Ð´Ð°Ð½Ð½ÑÑ\n3. ÐÐ° endpoint Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑÑÑ HTTP-Ð·Ð°Ð¿ÑÐ¾Ñ\n4. ÐÑÐ»Ð¸ Ð¿ÑÐ¸ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ð¸ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ ÑÐºÐ°Ð·Ð°Ð½ `secret`, Ð¿ÑÐ¾Ð²ÐµÑÑÐµÑÑÑ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº `X-Max-Bot-Api-Secret` \n5. ÐÑÐ¸ ÑÑÐ¿ÐµÑÐ½Ð¾Ð¹ Ð²Ð°Ð»Ð¸Ð´Ð°ÑÐ¸Ð¸ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ HTTP 200 OK\n6. ÐÑÐ¿Ð¾Ð»Ð½ÑÐµÑÑÑ Ð±Ð¸Ð·Ð½ÐµÑ-Ð»Ð¾Ð³Ð¸ÐºÐ° Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐºÐ¸ ÑÐ¾Ð±ÑÑÐ¸Ñ\n7. ÐÐ½Ð¸ÑÐ¸Ð¸ÑÑÑÑÑÑ Ð²ÑÐ·Ð¾Ð²Ñ MAX API\n\n\n## Ð¢ÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ñ Ðº Webhook-endpoint\n\n### URL Ð¸ Ð¿Ð¾ÑÑ\n\nWebhook-endpoint Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð±ÑÑÑ Ð´Ð¾ÑÑÑÐ¿ÐµÐ½ Ð¿Ð¾ HTTPS Ð½Ð° Ð¿Ð¾ÑÑÑ 443. ÐÐ°Ñ ÑÐµÑÐ²ÐµÑ Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð¿ÑÐ¾ÑÐ»ÑÑÐ¸Ð²Ð°ÑÑ ÑÑÐ¾Ñ Ð¿Ð¾ÑÑ. ÐÐ¾ÑÑ Ð² URL Ð½Ðµ ÑÐºÐ°Ð·ÑÐ²Ð°ÐµÑÑÑ:\n\n```\nhttps://your-domain.com/webhook\n```\n\n> ÐÐ¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿Ð¾ÑÑ 443. ÐÑÐ»Ð¸ endpoint Ð½ÐµÐ´Ð¾ÑÑÑÐ¿ÐµÐ½, ÑÐ¾Ð±ÑÑÐ¸Ñ Ð½Ðµ Ð´Ð¾ÑÑÐ°Ð²Ð»ÑÑÑÑÑ\n\n### ÐÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ÑÑÑ ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ñ (TLS)\n\nÐÐµÑÐµÐ´ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¾Ð¹ ÑÐ¾Ð±ÑÑÐ¸Ð¹ ÑÑÑÐ°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÑÑÑ HTTPS-ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ðµ Ð¸ Ð¿ÑÐ¾Ð²ÐµÑÑÐµÑÑÑ TLS-ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°Ñ Webhook-endpoint. Ð­ÑÐ¾ Ð½ÐµÐ¾Ð±ÑÐ¾Ð´Ð¸Ð¼Ð¾ Ð´Ð»Ñ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾Ð¹ Ð¿ÐµÑÐµÐ´Ð°ÑÐ¸ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸\n\nÐ¢ÑÐµÐ±Ð¾Ð²Ð°Ð½Ð¸Ñ Ðº ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÑ:\n\n- ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°Ñ Ð²ÑÐ´Ð°Ð½ Ð´Ð¾Ð²ÐµÑÐµÐ½Ð½ÑÐ¼ ÑÐµÐ½ÑÑÐ¾Ð¼ ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¸Ð¸\n- ÑÐ°Ð¼Ð¾Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ°Ð½Ð½ÑÐµ ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÑ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÑÑÑÑ\n- Ð´Ð¾Ð¼ÐµÐ½Ð½Ð¾Ðµ Ð¸Ð¼Ñ Ð² URL ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ Ñ CN Ð¸Ð»Ð¸ SAN ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÐ°\n- ÑÐµÑÐ²ÐµÑ Ð¿ÑÐµÐ´Ð¾ÑÑÐ°Ð²Ð»ÑÐµÑ Ð¿Ð¾Ð»Ð½ÑÑ ÑÐµÐ¿Ð¾ÑÐºÑ ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ð²\n\n> ÐÑÐ»Ð¸ TLS-Ð¿ÑÐ¾Ð²ÐµÑÐºÐ° Ð½Ðµ Ð¿ÑÐ¾ÑÐ¾Ð´Ð¸Ñ, ÑÐ¾Ð±ÑÑÐ¸Ñ Ð½Ðµ Ð´Ð¾ÑÑÐ°Ð²Ð»ÑÑÑÑÑ\n\n### ÐÐ±ÑÐ°Ð±Ð¾ÑÐºÐ° Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð²\n\nWebhook-endpoint Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÑÑ **HTTP 200** Ð² ÑÐµÑÐµÐ½Ð¸Ðµ 30 ÑÐµÐºÑÐ½Ð´. ÐÑÐ±Ð¾Ð¹ Ð´ÑÑÐ³Ð¾Ð¹ ÐºÐ¾Ð´ Ð¾ÑÐ²ÐµÑÐ° Ð¸Ð»Ð¸ Ð¿ÑÐµÐ²ÑÑÐµÐ½Ð¸Ðµ ÑÐ°Ð¹Ð¼-Ð°ÑÑÐ° â Ð¾ÑÐ¸Ð±ÐºÐ° Ð´Ð¾ÑÑÐ°Ð²ÐºÐ¸\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X POST \"https://platform-api.max.ru/subscriptions\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"url\": \"https://your-domain.com/webhook\",\n  \"update_types\": [\"message_created\", \"bot_started\"],\n  \"secret\": \"your_secret\"\n}'\n```\n\n### ÐÐ¾Ð»Ð¸ÑÐ¸ÐºÐ° Ð¿Ð¾Ð²ÑÐ¾ÑÐ½ÑÑ Ð¿Ð¾Ð¿ÑÑÐ¾Ðº\n\nÐÑÐ»Ð¸ Ð´Ð¾ÑÑÐ°Ð²ÐºÐ° Ð½Ðµ ÑÐ´Ð°Ð»Ð°ÑÑ, Ð²ÑÐ¿Ð¾Ð»Ð½ÑÐµÑÑÑ Ð´Ð¾ 10 Ð¿Ð¾Ð²ÑÐ¾ÑÐ½ÑÑ Ð¿Ð¾Ð¿ÑÑÐ¾Ðº Ñ ÑÐºÑÐ¿Ð¾Ð½ÐµÐ½ÑÐ¸Ð°Ð»ÑÐ½Ð¾ ÑÐ°ÑÑÑÑÐ¸Ð¼ Ð¸Ð½ÑÐµÑÐ²Ð°Ð»Ð¾Ð¼:\n\n- 1-Ñ Ð¿Ð¾Ð¿ÑÑÐºÐ°: ÑÐµÑÐµÐ· 60 ÑÐµÐºÑÐ½Ð´\n- 2-Ñ Ð¿Ð¾Ð¿ÑÑÐºÐ°: ÑÐµÑÐµÐ· 150 ÑÐµÐºÑÐ½Ð´ (60 × 2,5)\n- 3-Ñ Ð¿Ð¾Ð¿ÑÑÐºÐ°: ÑÐµÑÐµÐ· 375 ÑÐµÐºÑÐ½Ð´ (150 × 2,5)\n- Ð¸ ÑÐ°Ðº Ð´Ð°Ð»ÐµÐµ\n\n> ÐÑÐ»Ð¸ Ð² ÑÐµÑÐµÐ½Ð¸Ðµ 8 ÑÐ°ÑÐ¾Ð² Ð¿Ð¾ URL Ð²ÐµÐ±ÑÑÐºÐ° Ð½Ðµ Ð¿Ð¾Ð»ÑÑÐµÐ½ ÑÑÐ¿ÐµÑÐ½ÑÐ¹ Ð¾ÑÐ²ÐµÑ, Ð±Ð¾Ñ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸ Ð¾ÑÐ¿Ð¸ÑÑÐ²Ð°ÐµÑÑÑ Ð¾Ñ Ð²ÐµÐ±ÑÑÐºÐ°\n\n## ÐÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ÑÑÑ Webhook-Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð²\n\n ÐÐ°ÑÐ°Ð¼ÐµÑÑ `secret` Ð¿Ð¾Ð·Ð²Ð¾Ð»ÑÐµÑ ÑÐ±ÐµÐ´Ð¸ÑÑÑÑ, ÑÑÐ¾ Webhook-Ð·Ð°Ð¿ÑÐ¾ÑÑ Ð¿ÑÐ¸ÑÐ¾Ð´ÑÑ Ð¾Ñ MAX, Ð° Ð½Ðµ Ð¾Ñ ÑÑÐµÑÑÐµÐ¹ ÑÑÐ¾ÑÐ¾Ð½Ñ. Ð­ÑÐ¾ Ð½ÐµÐ¾Ð±ÑÐ·Ð°ÑÐµÐ»ÑÐ½ÑÐ¹ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑ, Ð½Ð¾ Ð¼Ñ Ð½Ð°ÑÑÐ¾ÑÑÐµÐ»ÑÐ½Ð¾ ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ ÑÐºÐ°Ð·ÑÐ²Ð°ÑÑ ÐµÐ³Ð¾. ÐÑÐ¾Ð²ÐµÑÑÐ¹ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ° `X-Max-Bot-Api-Secret` Ð½Ð° Webhook-ÑÐµÑÐ²ÐµÑÐµ Ð¸ Ð¾ÑÐºÐ»Ð¾Ð½ÑÐ¹ÑÐµ Ð·Ð°Ð¿ÑÐ¾ÑÑ Ð¿ÑÐ¸ Ð½ÐµÑÐ¾Ð¾ÑÐ²ÐµÑÑÑÐ²Ð¸Ð¸ \n\nÐÑÐ»Ð¸ `secret` ÑÐºÐ°Ð·Ð°Ð½ Ð¿ÑÐ¸ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ð¸ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸, Ð¾Ð½ Ð¿ÐµÑÐµÐ´Ð°ÑÑÑÑ Ð² Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐµ `X-Max-Bot-Api-Secret` ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ Webhook-Ð·Ð°Ð¿ÑÐ¾ÑÐ°\n\n  \n\n---\n\n## Ð¤Ð¾ÑÐ¼Ð°Ñ Ð¸ ÑÐ¸Ð¿Ñ ÑÐ¾Ð±ÑÑÐ¸Ð¹\n\nWebhook-Ð·Ð°Ð¿ÑÐ¾Ñ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ Ð¾Ð±ÑÐµÐºÑ [`Update`](https://dev.max.ru/docs-api/objects/Update)\n\nÐÐ¾Ð»Ð½ÑÐ¹ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ¸Ð¿Ð¾Ð² ÑÐ¾Ð±ÑÑÐ¸Ð¹ Ð¸ ÑÑÑÑÐºÑÑÑÐ° Ð¾Ð±ÑÐµÐºÑÐ° Ð¾Ð¿Ð¸ÑÐ°Ð½Ñ Ð² ÑÐ°Ð·Ð´ÐµÐ»Ðµ [Update](https://dev.max.ru/docs-api/objects/Update)",
+        "summary": "ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð½Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "subscriptions"
+        ],
+        "operationId": "unsubscribe",
+        "description": "ÐÑÐ¿Ð¸ÑÑÐ²Ð°ÐµÑ Ð±Ð¾ÑÐ° Ð¾Ñ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ ÑÐµÑÐµÐ· Webhook. ÐÐ¾ÑÐ»Ðµ Ð²ÑÐ·Ð¾Ð²Ð° ÑÑÐ¾Ð³Ð¾ Ð¼ÐµÑÐ¾Ð´Ð° Ð±Ð¾Ñ Ð¿ÐµÑÐµÑÑÐ°ÑÑ Ð¿Ð¾Ð»ÑÑÐ°ÑÑ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ Ð¾ Ð½Ð¾Ð²ÑÑ ÑÐ¾Ð±ÑÑÐ¸ÑÑ, Ð¸ ÑÑÐ°Ð½Ð¾Ð²Ð¸ÑÑÑ Ð´Ð¾ÑÑÑÐ¿Ð½Ð° Ð´Ð¾ÑÑÐ°Ð²ÐºÐ° ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ð¹ ÑÐµÑÐµÐ· API Ñ Ð´Ð»Ð¸ÑÐµÐ»ÑÐ½ÑÐ¼ Ð¾Ð¿ÑÐ¾ÑÐ¾Ð¼\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/subscriptions?url=https://your-domain.com/webhook\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÑÐ¿Ð¸ÑÐºÐ° Ð¾Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "URL, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð½ÑÐ¶Ð½Ð¾ ÑÐ´Ð°Ð»Ð¸ÑÑ Ð¸Ð· Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¾Ðº Ð½Ð° WebHook",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/uploads": {
+      "post": {
+        "tags": [
+          "upload"
+        ],
+        "operationId": "getUploadUrl",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ URL Ð´Ð»Ñ Ð¿Ð¾ÑÐ»ÐµÐ´ÑÑÑÐµÐ¹ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐ°Ð¹Ð»Ð°\n\n> ÐÐ°ÑÐ°Ð¼ÐµÑÑ `type=photo` Ð±Ð¾Ð»ÑÑÐµ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ. ÐÑÐ»Ð¸ Ð²Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð»Ð¸ `type=photo` Ð² ÑÐ°Ð½ÐµÐµ ÑÐ¾Ð·Ð´Ð°Ð½Ð½ÑÑ Ð¸Ð½ÑÐµÐ³ÑÐ°ÑÐ¸ÑÑ â Ð·Ð°Ð¼ÐµÐ½Ð¸ÑÐµ ÐµÐ³Ð¾ Ð½Ð° `type=image`\n\nÐÐ¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÑÑÑÑ Ð´Ð²Ð° ÑÐ¸Ð¿Ð° Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸:\n- **Multipart upload** â Ð±Ð¾Ð»ÐµÐµ Ð¿ÑÐ¾ÑÑÐ¾Ð¹, Ð½Ð¾ Ð¼ÐµÐ½ÐµÐµ Ð½Ð°Ð´ÑÐ¶Ð½ÑÐ¹ ÑÐ¿Ð¾ÑÐ¾Ð±. Ð ÑÑÐ¾Ð¼ ÑÐ»ÑÑÐ°Ðµ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº `Content-Type: multipart/form-data`. Ð¤Ð°Ð¹Ð» Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑÑÑ ÑÐµÐ»Ð¸ÐºÐ¾Ð¼ Ð¾Ð´Ð½Ð¸Ð¼ Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð¼. ÐÑÐ»Ð¸ Ð·Ð°Ð³ÑÑÐ·ÐºÐ° Ð¿ÑÐµÑÐ²ÑÑÑÑ, Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ ÐµÑ Ð²Ð¾Ð·Ð¾Ð±Ð½Ð¾Ð²Ð¸ÑÑ â Ð¿ÑÐ¸Ð´ÑÑÑÑ Ð½Ð°ÑÐ°ÑÑ Ð·Ð°Ð½Ð¾Ð²Ð¾\n\n    \n- **Resumable upload** â Ð±Ð¾Ð»ÐµÐµ Ð½Ð°Ð´ÑÐ¶Ð½ÑÐ¹ ÑÐ¿Ð¾ÑÐ¾Ð±, ÐµÑÐ»Ð¸ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº `Content-Type` Ð½Ðµ ÑÐ°Ð²ÐµÐ½ `multipart/form-data`. Ð­ÑÐ¾Ñ ÑÐ¿Ð¾ÑÐ¾Ð± Ð¿Ð¾Ð·Ð²Ð¾Ð»ÑÐµÑ Ð·Ð°Ð³ÑÑÐ¶Ð°ÑÑ ÑÐ°Ð¹Ð» ÑÐ°ÑÑÑÐ¼Ð¸ Ð¸ Ð²Ð¾Ð·Ð¾Ð±Ð½Ð¾Ð²Ð¸ÑÑ Ð·Ð°Ð³ÑÑÐ·ÐºÑ Ñ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ ÑÑÐ¿ÐµÑÐ½Ð¾ Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð½Ð¾Ð¹ ÑÐ°ÑÑÐ¸ Ð² ÑÐ»ÑÑÐ°Ðµ Ð¾ÑÐ¸Ð±Ð¾Ðº\n\n ÐÐ±ÑÐ¸Ðµ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½Ð¸Ñ Ð´Ð»Ñ Ð¾Ð±Ð¾Ð¸Ñ ÑÐ¸Ð¿Ð¾Ð² Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸:\n- ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½ÑÐ¹ ÑÐ°Ð·Ð¼ÐµÑ ÑÐ°Ð¹Ð»Ð°: 4 ÐÐ\n- ÐÐ¾Ð¶Ð½Ð¾ Ð·Ð°Ð³ÑÑÐ¶Ð°ÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¾Ð´Ð¸Ð½ ÑÐ°Ð¹Ð» Ð·Ð° ÑÐ°Ð·\n\nÐÑÐ¸Ð¼ÐµÑ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ ÑÑÑÐ»ÐºÐ¸ Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸:\n\n```bash\ncurl -X POST \"https://platform-api.max.ru/uploads?type=file\" \\\n  -H \"Authorization: {access_token}\"\n```\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐ°Ð¹Ð»Ð° Ð¿Ð¾ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð½Ð¾Ð¼Ñ URL:\n\n```bash\ncurl -X POST \"%UPLOAD_URL%\" \\\n  -H \"Authorization: {access_token}\" \\\n  -F \"data=@example.mp4\"\n```\n\nÐÑÐ¸Ð¼ÐµÑ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð½Ð¸Ñ cURL Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐ°Ð¹Ð»Ð° (Ð²Ð°ÑÐ¸Ð°Ð½Ñ multipart upload):\n\n```shell\ncurl -i -X POST \\\n  -H \"Content-Type: multipart/form-data\" \\\n  -F \"data=@movie.pdf\" \"%UPLOAD_URL%\"\n```\n\nÐÐ´Ðµ `%UPLOAD_URL%` â ÑÑÐ¾ URL Ð¸Ð· ÑÐµÐ·ÑÐ»ÑÑÐ°ÑÐ° Ð¼ÐµÑÐ¾Ð´Ð° Ð² Ð¿ÑÐ¸Ð¼ÐµÑÐµ cURL Ð·Ð°Ð¿ÑÐ¾ÑÐ°\n\n**ÐÐ»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð²Ð¸Ð´ÐµÐ¾ Ð¸ Ð°ÑÐ´Ð¸Ð¾:**\n\n1. ÐÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÑÐ°ÐµÐ¼ ÑÑÑÐ»ÐºÑ Ð½Ð° Ð·Ð°Ð³ÑÑÐ·ÐºÑ Ð²Ð¸Ð´ÐµÐ¾ Ð¸Ð»Ð¸ Ð°ÑÐ´Ð¸Ð¾ (`POST /uploads` Ñ `type` = `video` Ð¸Ð»Ð¸ `type` = `audio`), Ð²Ð¼ÐµÑÑÐµ Ñ `url` Ð² Ð¾ÑÐ²ÐµÑÐµ Ð¿ÑÐ¸ÑÐ¾Ð´Ð¸Ñ `token`, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð½ÑÐ¶Ð½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸ (ÐºÐ¾Ð³Ð´Ð° ÑÐ¾ÑÐ¼Ð¸ÑÑÐµÑÐµ `body` Ñ `attachments`) Ð² `POST /messages`.\n\n2. ÐÐ¾ÑÐ»Ðµ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð²Ð¸Ð´ÐµÐ¾ Ð¸Ð»Ð¸ Ð°ÑÐ´Ð¸Ð¾ (Ð¿Ð¾ `url` Ð¸Ð· ÑÐ°Ð³Ð° Ð²ÑÑÐµ) ÑÐµÑÐ²ÐµÑ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ `retval`\n\n3. C ÑÑÐ¾Ð³Ð¾ Ð¼Ð¾Ð¼ÐµÐ½ÑÐ° Ð¼Ð¾Ð¶Ð½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ `token`, ÑÑÐ¾Ð±Ñ Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÑÑÑ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±Ð¾ÑÐ°\n\nÐÐµÑÐ°Ð½Ð¸ÐºÐ° Ð¾ÑÐ»Ð¸ÑÐ°ÐµÑÑÑ Ð¾Ñ `type` = `image` | `file`, Ð³Ð´Ðµ `token` Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ Ð² Ð¾ÑÐ²ÐµÑÐµ Ð½Ð° Ð·Ð°Ð³ÑÑÐ·ÐºÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ Ð¸Ð»Ð¸ ÑÐ°Ð¹Ð»Ð°\n\n## ÐÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð¼ÐµÐ´Ð¸Ð°\nÐÐµÐ´Ð¸Ð°ÑÐ°Ð¹Ð»Ñ Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÑÑÑÑÑ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸ÑÐ¼ Ð¿Ð¾ÑÑÐ°Ð¿Ð½Ð¾:\n\n1. ÐÐ¾Ð»ÑÑÐ¸ÑÐµ URL Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð¼ÐµÐ´Ð¸Ð°ÑÐ°Ð¹Ð»Ð¾Ð²\n2. ÐÐ°Ð³ÑÑÐ·Ð¸ÑÐµ ÑÐ°Ð¹Ð» Ð¿Ð¾ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð½Ð¾Ð¼Ñ URL\n3. ÐÐ¾ÑÐ»Ðµ ÑÑÐ¿ÐµÑÐ½Ð¾Ð¹ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ JSON-Ð¾Ð±ÑÐµÐºÑ Ð² Ð¾ÑÐ²ÐµÑÐµ. ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ ÑÑÐ¾Ñ Ð¾Ð±ÑÐµÐºÑ Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ. Ð¡ÑÑÑÐºÑÑÑÐ° Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ:\n    - `type`: ÑÐ¸Ð¿ Ð¼ÐµÐ´Ð¸Ð° (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ, `\"video\"`)\n    - `payload`: JSON-Ð¾Ð±ÑÐµÐºÑ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð²Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ð»Ð¸\n\nÐÑÐ¸Ð¼ÐµÑ Ð´Ð»Ñ Ð²Ð¸Ð´ÐµÐ¾:\n1. ÐÐ¾Ð»ÑÑÐ¸ÑÐµ URL Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸:\n```bash\ncurl -X POST \"https://platform-api.max.ru/uploads?type=video\" \\\n  -H \"Authorization: {access_token}\"\n```\n\nÐÑÐ²ÐµÑ:\n```json\n{\n    \"url\": \"https://vu.mycdn.me/upload.doâ¦\"\n}\n```\n\n2. ÐÐ°Ð³ÑÑÐ·Ð¸ÑÐµ Ð²Ð¸Ð´ÐµÐ¾ Ð¿Ð¾ URL:\n\n```bash\ncurl -X POST \\\n  -H \"Content-Type: multipart/form-data\" \\\n  -F \"data=@movie.mp4\" \\\n  \"https://vu.mycdn.me/upload.do?sig={signature}&expires={timestamp}\"\n```\n\nÐÑÐ²ÐµÑ:\n```json\n{\n    \"token\": \"_3Rarhcf1PtlMXy8jpgie8Ai_KARnVFYNQTtmIRWNh4\"\n}\n```\n\n3. ÐÑÐ¿ÑÐ°Ð²ÑÑÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼:\n\n```json\n{\n    \"text\": \"Message with video\",\n    \"attachments\": [\n        {\n            \"type\": \"video\",\n            \"payload\": {\n                \"token\": \"_3Rarhcf1PtlMXy8jpgie8Ai_KARnVFYNQTtmIRWNh4\"\n            }\n        }\n    ]\n}\n```\n\n## ÐÐ±ÑÐ°Ð±Ð¾ÑÐºÐ° ÑÐ°Ð¹Ð»Ð¾Ð²\n\nÐÐ¾ÑÐ»Ðµ ÑÑÐ¿ÐµÑÐ½Ð¾Ð¹ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐµÑÐ²ÐµÑ Ð¾Ð±ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÐµÑ ÑÐ°Ð¹Ð». Ð¤Ð°Ð¹Ð»Ñ Ð¾Ñ Ð½ÐµÑÐºÐ¾Ð»ÑÐºÐ¸Ñ Ð¼ÐµÐ³Ð°Ð±Ð°Ð¹Ñ Ð¾Ð±ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÑÑÑÑ Ð´Ð¾Ð»ÑÑÐµ\n\n> ÐÐ»Ñ ÑÑÐ°Ð±Ð¸Ð»ÑÐ½Ð¾Ð¹ ÑÐ°Ð±Ð¾ÑÑ ÑÐµÑÐ²Ð¸ÑÐ¾Ð² MAX ÑÐ±ÐµÐ´Ð¸ÑÐµÑÑ, ÑÑÐ¾ Ð¼Ð°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð·Ð°Ð¿ÑÐ¾ÑÐ¾Ð² Ð² ÑÐµÐºÑÐ½Ð´Ñ Ð½Ð° platform-api.max.ru â 30 rps \n\nÐÑÐ»Ð¸ Ð¾ÑÐ¿ÑÐ°Ð²Ð¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ ÑÑÐ°Ð·Ñ Ð¿Ð¾ÑÐ»Ðµ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸, Ð¼Ð¾Ð¶ÐµÑ Ð²Ð¾Ð·Ð½Ð¸ÐºÐ½ÑÑÑ Ð¾ÑÐ¸Ð±ÐºÐ°:\n\n```json\n{\n  \"code\": \"attachment.not.ready\",\n  \"message\": \"Key: errors.process.attachment.file.not.processed\"\n}\n```\n\n**ÐÐ°Ðº Ð¸Ð·Ð±ÐµÐ¶Ð°ÑÑ Ð¾ÑÐ¸Ð±ÐºÐ¸:**\n- ÐÐ¾ÑÐ»Ðµ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐ°Ð¹Ð»Ð° ÑÐ´ÐµÐ»Ð°Ð¹ÑÐµ Ð¿Ð°ÑÐ·Ñ Ð¿ÐµÑÐµÐ´ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¾Ð¹ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n- ÐÑÐ»Ð¸ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ° Ð½Ðµ ÑÐ´Ð°Ð»Ð°ÑÑ, Ð¿Ð¾Ð²ÑÐ¾ÑÐ¸ÑÐµ Ð¿Ð¾Ð¿ÑÑÐºÑ ÑÐµÑÐµÐ· Ð½ÐµÐºÐ¾ÑÐ¾ÑÐ¾Ðµ Ð²ÑÐµÐ¼Ñ. Ð£Ð²ÐµÐ»Ð¸ÑÐ¸Ð²Ð°Ð¹ÑÐµ Ð¸Ð½ÑÐµÑÐ²Ð°Ð» Ñ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð¿Ð¾Ð¿ÑÑÐºÐ¾Ð¹\n- ÐÐ°Ð³ÑÑÐ¶Ð°Ð¹ÑÐµ ÑÐ°ÑÑÐ¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ÑÐµ ÑÐ°Ð¹Ð»Ñ Ð·Ð°ÑÐ°Ð½ÐµÐµ Ð¸ Ð¿ÐµÑÐµÐ¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ ÑÐ¾ÐºÐµÐ½\n\n",
+        "summary": "ÐÐ°Ð³ÑÑÐ·ÐºÐ° ÑÐ°Ð¹Ð»Ð¾Ð²",
+        "parameters": [
+          {
+            "description": "Ð¢Ð¸Ð¿ Ð·Ð°Ð³ÑÑÐ¶Ð°ÐµÐ¼Ð¾Ð³Ð¾ ÑÐ°Ð¹Ð»Ð°. ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ: `\"image\"`, `\"video\"`, `\"audio\"`, `\"file\"`",
+            "name": "type",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UploadType"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ URL Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadEndpoint"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/messages": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "getMessages",
+        "description": "ÐÐµÑÐ¾Ð´ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸ Ð¸Ð»Ð¸ Ð¼Ð°ÑÑÐ¸Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹ Ð¸Ð· ÑÐ°ÑÐ°. ÐÐ»Ñ Ð²ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ð½ÑÐ¶Ð½Ð¾ ÑÐºÐ°Ð·Ð°ÑÑ Ð¾Ð´Ð¸Ð½ Ð¸Ð· Ð¿Ð°ÑÐ°Ð¼ÐµÑÑÐ¾Ð² â `chat_id` Ð¸Ð»Ð¸ `message_ids`:\n\n- `chat_id` â Ð¼ÐµÑÐ¾Ð´ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¼Ð°ÑÑÐ¸Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹ Ð¸Ð· ÑÐºÐ°Ð·Ð°Ð½Ð½Ð¾Ð³Ð¾ ÑÐ°ÑÐ°. Ð¡Ð¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÑÑÑÑ Ð² Ð¾Ð±ÑÐ°ÑÐ½Ð¾Ð¼ Ð¿Ð¾ÑÑÐ´ÐºÐµ: Ð¿Ð¾ÑÐ»ÐµÐ´Ð½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð±ÑÐ´ÑÑ Ð¿ÐµÑÐ²ÑÐ¼Ð¸ Ð² Ð¼Ð°ÑÑÐ¸Ð²Ðµ\n\n- `message_ids` â Ð¼ÐµÑÐ¾Ð´ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð·Ð°Ð¿ÑÐ¾ÑÐµÐ½Ð½ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸ÑÑ. ÐÐ¾Ð¶Ð½Ð¾ ÑÐºÐ°Ð·Ð°ÑÑ Ð¾Ð´Ð¸Ð½ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¸Ð»Ð¸ Ð½ÐµÑÐºÐ¾Ð»ÑÐºÐ¾\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð½Ð¸ÐµÐ¼ `chat_id`:\n```bash\ncurl -X GET \"https://platform-api.max.ru/messages?chat_id={chat_id}\" \\\n  -H \"Authorization: {access_token}\"\n```\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð½Ð¸ÐµÐ¼ `message_ids`:\n```bash\ncurl -X GET \"https://platform-api.max.ru/messages?message_ids={message_id1},{message_id2}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹",
+        "parameters": [
+          {
+            "description": " ID ÑÐ°ÑÐ°, ÑÑÐ¾Ð±Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð¸Ð· Ð¾Ð¿ÑÐµÐ´ÐµÐ»ÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ°ÑÐ°. ÐÐ±ÑÐ·Ð°ÑÐµÐ»ÑÐ½ÑÐ¹ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑ, ÐµÑÐ»Ð¸ Ð½Ðµ ÑÐºÐ°Ð·Ð°Ð½ `message_ids`",
+            "name": "chat_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/bigint"
+            }
+          },
+          {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð½ÑÐ¶Ð½Ð¾ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ (ÑÐµÑÐµÐ· Ð·Ð°Ð¿ÑÑÑÑ). ÐÐ±ÑÐ·Ð°ÑÐµÐ»ÑÐ½ÑÐ¹ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑ, ÐµÑÐ»Ð¸ Ð½Ðµ ÑÐºÐ°Ð·Ð°Ð½ `chat_id`",
+            "name": "message_ids",
+            "in": "query",
+            "style": "simple",
+            "schema": {
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              },
+              "nullable": true
+            }
+          },
+          {
+            "name": "from",
+            "description": "ÐÑÐµÐ¼Ñ Ð½Ð°ÑÐ°Ð»Ð° Ð´Ð»Ñ Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹ (Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ Unix timestamp)",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/bigint"
+            }
+          },
+          {
+            "name": "to",
+            "description": "ÐÑÐµÐ¼Ñ Ð¾ÐºÐ¾Ð½ÑÐ°Ð½Ð¸Ñ Ð´Ð»Ñ Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹ (Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ Unix timestamp)",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/bigint"
+            }
+          },
+          {
+            "name": "count",
+            "description": "ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹ Ð² Ð¾ÑÐ²ÐµÑÐµ",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Ð­ÑÐ¾ Ð¸ÑÐºÐ»ÑÑÐµÐ½Ð¸Ðµ Ð²Ð¾Ð·Ð½Ð¸ÐºÐ°ÐµÑ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¿ÑÐ¸Ð¾ÑÑÐ°Ð½Ð¾Ð²Ð¸Ð» Ð±Ð¾ÑÐ° Ð¸Ð»Ð¸ Ñ Ð½ÐµÐ³Ð¾ Ð½ÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð° Ðº ÑÐ°ÑÑ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "sendMessage",
+        "description": "ÐÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² ÑÐ°Ñ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n````bash\ncurl -X POST \"https://platform-api.max.ru/messages?user_id={user_id}\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"text\": \"Ð­ÑÐ¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹-ÑÑÑÐ»ÐºÐ¾Ð¹\",\n  \"attachments\": [\n    {\n      \"type\": \"inline_keyboard\",\n      \"payload\": {\n        \"buttons\": [\n          [\n            {\n              \"type\": \"link\",\n              \"text\": \"ÐÑÐºÑÐ¾Ð¹ÑÐµ ÑÐ°Ð¹Ñ\",\n              \"url\": \"https://example.com\"\n            }\n          ]\n        ]\n      }\n    }\n  ]\n}'",
+        "summary": "ÐÑÐ¿ÑÐ°Ð²Ð¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+        "parameters": [
+          {
+            "name": "user_id",
+            "description": "ÐÑÐ»Ð¸ Ð²Ñ ÑÐ¾ÑÐ¸ÑÐµ Ð¾ÑÐ¿ÑÐ°Ð²Ð¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÑÐºÐ°Ð¶Ð¸ÑÐµ ÐµÐ³Ð¾ ID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "chat_id",
+            "description": "ÐÑÐ»Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑÑÑ Ð² ÑÐ°Ñ, ÑÐºÐ°Ð¶Ð¸ÑÐµ ÐµÐ³Ð¾ ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "in": "query",
+            "required": false
+          },
+          {
+            "name": "disable_link_preview",
+            "description": " ÐÑÐ»Ð¸ `false`, ÑÐµÑÐ²ÐµÑ Ð½Ðµ Ð±ÑÐ´ÐµÑ Ð³ÐµÐ½ÐµÑÐ¸ÑÐ¾Ð²Ð°ÑÑ Ð¿ÑÐµÐ²ÑÑ Ð´Ð»Ñ ÑÑÑÐ»Ð¾Ðº Ð² ÑÐµÐºÑÑÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ¾Ð·Ð´Ð°Ð½Ð½Ð¾Ð¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "editMessage",
+        "description": "Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÑÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² ÑÐ°ÑÐµ. ÐÑÐ»Ð¸ Ð¿Ð¾Ð»Ðµ `attachments` ÑÐ°Ð²Ð½Ð¾ `null`, Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ ÑÐµÐºÑÑÐµÐ³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð½Ðµ Ð¸Ð·Ð¼ÐµÐ½ÑÑÑÑÑ. ÐÑÐ»Ð¸ Ð² ÑÑÐ¾Ð¼ Ð¿Ð¾Ð»Ðµ Ð¿ÐµÑÐµÐ´Ð°Ð½ Ð¿ÑÑÑÐ¾Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº, Ð²ÑÐµ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð±ÑÐ´ÑÑ ÑÐ´Ð°Ð»ÐµÐ½Ñ\n\n>  Ð¡ Ð¿Ð¾Ð¼Ð¾ÑÑÑ Ð¼ÐµÑÐ¾Ð´Ð° Ð¼Ð¾Ð¶Ð½Ð¾ Ð¾ÑÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ñ Ð¼ÐµÐ½ÐµÐµ 24 ÑÐ°ÑÐ¾Ð² Ð½Ð°Ð·Ð°Ð´\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X PUT \"https://platform-api.max.ru/messages?message_id=message_id\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n  \"text\": \"ÐÐ·Ð¼ÐµÐ½ÑÐ½Ð½ÑÐ¹ ÑÐµÐºÑÑ\"\n}'\n```",
+        "summary": "Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+        "parameters": [
+          {
+            "name": "message_id",
+            "description": "ID ÑÐµÐ´Ð°ÐºÑÐ¸ÑÑÐµÐ¼Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "deleteMessage",
+        "summary": "Ð£Ð´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+        "description": "Ð£Ð´Ð°Ð»ÑÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² Ð´Ð¸Ð°Ð»Ð¾Ð³Ðµ Ð¸Ð»Ð¸ ÑÐ°ÑÐµ, ÐµÑÐ»Ð¸ Ð±Ð¾Ñ Ð¸Ð¼ÐµÐµÑ ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ðµ Ð½Ð° ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹\n\n> Ð¡ Ð¿Ð¾Ð¼Ð¾ÑÑÑ Ð¼ÐµÑÐ¾Ð´Ð° Ð¼Ð¾Ð¶Ð½Ð¾ ÑÐ´Ð°Ð»ÑÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ñ Ð¼ÐµÐ½ÐµÐµ 24 ÑÐ°ÑÐ¾Ð² Ð½Ð°Ð·Ð°Ð´\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X DELETE \"https://platform-api.max.ru/messages?message_id={message_id}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "parameters": [
+          {
+            "name": "message_id",
+            "description": "ID ÑÐ´Ð°Ð»ÑÐµÐ¼Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/messages/{messageId}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "getMessageById",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¿Ð¾ ÐµÐ³Ð¾ ID\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/messages/{messageId}\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐ¸ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+        "parameters": [
+          {
+            "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ (`mid`), ÑÑÐ¾Ð±Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð¾Ð´Ð½Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² ÑÐ°ÑÐµ",
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9_\\-]+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¾Ð´Ð½Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Ð ÑÐ»ÑÑÐ°Ðµ, ÐµÑÐ»Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ Ð¸Ð»Ð¸ Ð±Ð¾Ñ Ð½Ðµ Ð¸Ð¼ÐµÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð° Ðº Ð½ÐµÐ¼Ñ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/videos/{videoToken}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "getVideoAttachmentDetails",
+        "description": "ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Ð¿Ð¾Ð´ÑÐ¾Ð±Ð½ÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ð¼ Ð²Ð¸Ð´ÐµÐ¾. URL-Ð°Ð´ÑÐµÑÐ° Ð²Ð¾ÑÐ¿ÑÐ¾Ð¸Ð·Ð²ÐµÐ´ÐµÐ½Ð¸Ñ Ð¸ Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½ÑÐµ Ð¼ÐµÑÐ°Ð´Ð°Ð½Ð½ÑÐµ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/videos/{video_token}\" \\\n  -H \"Authorization: {access_token}\"",
+        "summary": "ÐÐ¾Ð»ÑÑÐ¸ÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¾ Ð¾ Ð²Ð¸Ð´ÐµÐ¾",
+        "parameters": [
+          {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ Ð²Ð¸Ð´ÐµÐ¾-Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+            "in": "path",
+            "name": "videoToken",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9_\\-]+"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detailed video attachment info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoAttachmentDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Ð ÑÐ»ÑÑÐ°Ðµ, ÐµÑÐ»Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ Ð¸Ð»Ð¸ Ð±Ð¾Ñ Ð½Ðµ Ð¸Ð¼ÐµÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð° Ðº Ð½ÐµÐ¼Ñ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/answers": {
+      "post": {
+        "tags": [
+          "messages"
+        ],
+        "operationId": "answerOnCallback",
+        "description": "Ð­ÑÐ¾Ñ Ð¼ÐµÑÐ¾Ð´ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð´Ð»Ñ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¸ Ð¾ÑÐ²ÐµÑÐ° Ð¿Ð¾ÑÐ»Ðµ ÑÐ¾Ð³Ð¾, ÐºÐ°Ðº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð°Ð» Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÑ. ÐÑÐ²ÐµÑÐ¾Ð¼ Ð¼Ð¾Ð¶ÐµÑ Ð±ÑÑÑ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¸/Ð¸Ð»Ð¸ Ð¾Ð´Ð½Ð¾ÑÐ°Ð·Ð¾Ð²Ð¾Ðµ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ð´Ð»Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X POST \"https://platform-api.max.ru/answers?callback_id=callback_id\" \\\n  -H \"Authorization: {access_token}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"message\": {\n      \"text\": \"Ð­ÑÐ¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¾Ð¹-ÑÑÑÐ»ÐºÐ¾Ð¹\",\n      \"attachments\": [\n        {\n          \"type\": \"inline_keyboard\",\n          \"payload\": {\n            \"buttons\": [\n              [\n                {\n                  \"type\": \"link\",\n                  \"text\": \"ÐÑÐºÑÐ¾Ð¹ÑÐµ ÑÐ°Ð¹Ñ\",\n                  \"url\": \"https://example.com\"\n                }\n              ]\n            ]\n          }\n        }\n      ]\n    }\n  }'\n```",
+        "summary": "ÐÑÐ²ÐµÑ Ð½Ð° callback",
+        "parameters": [
+          {
+            "name": "callback_id",
+            "description": "ÐÐ´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¸, Ð¿Ð¾ ÐºÐ¾ÑÐ¾ÑÐ¾Ð¹ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ ÐºÐ»Ð¸ÐºÐ½ÑÐ». ÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ°ÐµÑ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ ÐºÐ°Ðº ÑÐ°ÑÑÑ [Update](/docs-api/objects/Update) Ñ ÑÐ¸Ð¿Ð¾Ð¼`message_callback`.\n\nÐÐ¾Ð¶Ð½Ð¾ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ð¸Ð· [GET:/updates](/docs-api/methods/GET/updates) ÑÐµÑÐµÐ· Ð¿Ð¾Ð»Ðµ `updates[i].callback.callback_id`",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!\\s*$).+"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallbackAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SuccessResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "405": {
+            "$ref": "#/components/responses/NotAllowed"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/updates": {
+      "get": {
+        "operationId": "getUpdates",
+        "tags": [
+          "subscriptions"
+        ],
+        "description": "Ð­ÑÐ¾Ñ Ð¼ÐµÑÐ¾Ð´ Ð¼Ð¾Ð¶Ð½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð´Ð»Ñ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð¿ÑÐ¸ ÑÐ°Ð·ÑÐ°Ð±Ð¾ÑÐºÐµ Ð¸ ÑÐµÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ð¸, ÐµÑÐ»Ð¸ Ð²Ð°Ñ Ð±Ð¾Ñ Ð½Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ°Ð½ Ð½Ð° Webhook. ÐÐ»Ñ production-Ð¾ÐºÑÑÐ¶ÐµÐ½Ð¸Ñ ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Webhook \n\n ÐÐµÑÐ¾Ð´ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑ Ð´Ð¾Ð»Ð³Ð¸Ð¹ Ð¾Ð¿ÑÐ¾Ñ (long polling). ÐÐ°Ð¶Ð´Ð¾Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ Ð¸Ð¼ÐµÐµÑ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ Ð¿Ð¾ÑÐ»ÐµÐ´Ð¾Ð²Ð°ÑÐµÐ»ÑÐ½Ð¾ÑÑÐ¸. Ð¡Ð²Ð¾Ð¹ÑÑÐ²Ð¾ `marker` Ð² Ð¾ÑÐ²ÐµÑÐµ ÑÐºÐ°Ð·ÑÐ²Ð°ÐµÑ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÐµÐµ Ð¾Ð¶Ð¸Ð´Ð°ÐµÐ¼Ð¾Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ.\n\nÐÑÐµ Ð¿ÑÐµÐ´ÑÐ´ÑÑÐ¸Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÑÑÐ¸ÑÐ°ÑÑÑÑ Ð·Ð°Ð²ÐµÑÑÑÐ½Ð½ÑÐ¼Ð¸ Ð¿Ð¾ÑÐ»Ðµ Ð¿ÑÐ¾ÑÐ¾Ð¶Ð´ÐµÐ½Ð¸Ñ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑÐ° `marker`. ÐÑÐ»Ð¸ Ð¿Ð°ÑÐ°Ð¼ÐµÑÑ `marker` **Ð½Ðµ Ð¿ÐµÑÐµÐ´Ð°Ð½**, Ð±Ð¾Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ñ Ð²ÑÐµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ, Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐµÐ´ÑÐ¸Ðµ Ð¿Ð¾ÑÐ»Ðµ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ³Ð¾ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ñ\n\nÐÑÐ¸Ð¼ÐµÑ Ð·Ð°Ð¿ÑÐ¾ÑÐ°:\n```bash\ncurl -X GET \"https://platform-api.max.ru/updates\" \\\n  -H \"Authorization: {access_token}\"\n```",
+        "summary": "ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹",
+        "parameters": [
+          {
+            "name": "limit",
+            "description": "ÐÐ°ÐºÑÐ¸Ð¼Ð°Ð»ÑÐ½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð´Ð»Ñ Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            }
+          },
+          {
+            "name": "timeout",
+            "description": "Ð¢Ð°Ð¹Ð¼-Ð°ÑÑ Ð² ÑÐµÐºÑÐ½Ð´Ð°Ñ Ð´Ð»Ñ Ð´Ð¾Ð»Ð³Ð¾Ð³Ð¾ Ð¾Ð¿ÑÐ¾ÑÐ°",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 90,
+              "default": 30
+            }
+          },
+          {
+            "name": "marker",
+            "description": "ÐÑÐ»Ð¸ Ð¿ÐµÑÐµÐ´Ð°Ð½, Ð±Ð¾Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ, ÐºÐ¾ÑÐ¾ÑÑÐµ ÐµÑÐµ Ð½Ðµ Ð±ÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÑÐµÐ½Ñ. ÐÑÐ»Ð¸ Ð½Ðµ Ð¿ÐµÑÐµÐ´Ð°Ð½, Ð¿Ð¾Ð»ÑÑÐ¸Ñ Ð²ÑÐµ Ð½Ð¾Ð²ÑÐµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "types",
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ÑÐ¸Ð¿Ð¾Ð² Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð±Ð¾Ñ ÑÐ¾ÑÐµÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ (Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ, `message_created`, `message_callback`)",
+            "in": "query",
+            "example": "types=message_created,message_callback",
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              },
+              "nullable": true
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "405": {
+            "$ref": "#/components/responses/NotAllowed"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "access_token": {
+        "type": "apiKey",
+        "name": "access_token",
+        "description": "A token is given to you by [MasterBot](https://tt.me/MasterBot) after you have created a bot.\nIn all subsequent requests to the Bot API, you **must** pass the received token as an `access_token` parameter to the HTTP request.\n\n\nIf [Terms and Conditions of Max usage](https://team.max.ru/en/terms/) have been violated, the Max administration may withdraw tokens by aborting user sessions.\nIf your token has been compromised, you can request a new one by sending a `/revoke` command to **[MasterBot](https://tt.me/MasterBot)**.",
+        "in": "query"
+      }
+    },
+    "responses": {
+      "SuccessResponse": {
+        "description": "Ð£ÑÐ¿ÐµÑÐ½ÑÐ¹ Ð¸Ð»Ð¸ Ð½ÐµÑÑÐ¿ÐµÑÐ½ÑÐ¹ ÑÐµÐ·ÑÐ»ÑÑÐ°Ñ",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SimpleQueryResult"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "ÐÐ½ÑÑÑÐµÐ½Ð½ÑÑ Ð¾ÑÐ¸Ð±ÐºÐ° ÑÐµÑÐ²ÐµÑÐ°",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "ÐÑÐ¸Ð±ÐºÐ° Ð°Ð²ÑÐ¾ÑÐ¸Ð·Ð°ÑÐ¸Ð¸. ÐÐµ Ð¿ÑÐµÐ´Ð¾ÑÑÐ°Ð²Ð»ÐµÐ½ `access_token` Ð¸Ð»Ð¸ ÑÐ¾ÐºÐµÐ½ Ð½ÐµÐ´ÐµÐ¹ÑÑÐ²Ð¸ÑÐµÐ»ÐµÐ½",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "ÐÑÐ¸Ð±ÐºÐ° Ð´Ð¾ÑÑÑÐ¿Ð°. Ð£ Ð²Ð°Ñ Ð½ÐµÑ Ð¿ÑÐ°Ð² Ð½Ð° Ð´Ð¾ÑÑÑÐ¿ Ðº ÑÑÐ¾Ð¼Ñ ÑÐµÑÑÑÑÑ",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "ÐÐ°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÐ¹ ÑÐµÑÑÑÑ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotAllowed": {
+        "description": "ÐÐµÑÐ¾Ð´ Ð½Ðµ ÑÐ°Ð·ÑÐµÑÐµÐ½",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "bigint": {
+        "type": "integer",
+        "format": "int64"
+      },
+      "User": {
+        "description": "ÐÐ±ÑÐµÐºÑ, Ð¾Ð¿Ð¸ÑÑÐ²Ð°ÑÑÐ¸Ð¹ Ð¾Ð´Ð¸Ð½ Ð¸Ð· Ð²Ð°ÑÐ¸Ð°Ð½ÑÐ¾Ð² Ð½Ð°ÑÐ»ÐµÐ´Ð¾Ð²Ð°Ð½Ð¸Ñ:\n\n- [`User`](/docs-api/objects/User) â Ð¾Ð±ÑÐµÐºÑ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ Ð¾Ð±ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐµ Ð±ÐµÐ· Ð°Ð²Ð°ÑÐ°ÑÐ°\n- [`UserWithPhoto`](/docs-api/objects/UserWithPhoto) â Ð¾Ð±ÑÐµÐºÑ Ñ Ð¾Ð±ÑÐµÐ¹ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸ÐµÐ¹ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐµ, Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ\n- [`BotInfo`](/docs-api/objects/BotInfo) â Ð¾Ð±ÑÐµÐºÑ Ð²ÐºÐ»ÑÑÐ°ÐµÑ Ð¾Ð±ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð±Ð¾ÑÐµ, URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ. ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ ÑÐ¿Ð¸ÑÐ¾Ðº ÐºÐ¾Ð¼Ð°Ð½Ð´, Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÑ Ð±Ð¾ÑÐ¾Ð¼. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð²ÑÐ·Ð¾Ð²Ðµ Ð¼ÐµÑÐ¾Ð´Ð° [`GET /me`](/docs-api/methods/GET/me)\n- [`ChatMember`](/docs-api/objects/ChatMember) â Ð¾Ð±ÑÐµÐºÑ Ð²ÐºÐ»ÑÑÐ°ÐµÑ Ð¾Ð±ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐµ, URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¿ÑÐ¸ ÐµÐ³Ð¾ Ð½Ð°Ð»Ð¸ÑÐ¸Ð¸. ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ Ð´Ð°Ð½Ð½ÑÐµ Ð´Ð»Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹-ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² ÑÐ°ÑÐ°. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð²ÑÐ·Ð¾Ð²Ðµ Ð½ÐµÐºÐ¾ÑÐ¾ÑÑÑ Ð¼ÐµÑÐ¾Ð´Ð¾Ð² Ð³ÑÑÐ¿Ð¿Ñ `/chats`, Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ [`GET /chats/{chatId}/members`](/docs-api/methods/GET/chats/-chatId-/members)",
+        "properties": {
+          "user_id": {
+            "description": "ÐÐ´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ°",
+            "type": "integer",
+            "format": "int64"
+          },
+          "first_name": {
+            "description": "ÐÑÐ¾Ð±ÑÐ°Ð¶Ð°ÐµÐ¼Ð¾Ðµ Ð¸Ð¼Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ°",
+            "type": "string"
+          },
+          "last_name": {
+            "description": "ÐÑÐ¾Ð±ÑÐ°Ð¶Ð°ÐµÐ¼Ð°Ñ ÑÐ°Ð¼Ð¸Ð»Ð¸Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ. ÐÐ»Ñ Ð±Ð¾ÑÐ¾Ð² ÑÑÐ¾ Ð¿Ð¾Ð»Ðµ Ð½Ðµ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ",
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "description": "ÐÐ¸ÐºÐ½ÐµÐ¹Ð¼ Ð±Ð¾ÑÐ° Ð¸Ð»Ð¸ ÑÐ½Ð¸ÐºÐ°Ð»ÑÐ½Ð¾Ðµ Ð¿ÑÐ±Ð»Ð¸ÑÐ½Ð¾Ðµ Ð¸Ð¼Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ. Ð ÑÐ»ÑÑÐ°Ðµ Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¼ Ð¼Ð¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ ÑÐ¾Ñ Ð½ÐµÐ´Ð¾ÑÑÑÐ¿ÐµÐ½ Ð¸Ð»Ð¸ Ð¸Ð¼Ñ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ð¾",
+            "type": "string",
+            "nullable": true
+          },
+          "is_bot": {
+            "description": "`true`, ÐµÑÐ»Ð¸ ÑÑÐ¾ Ð±Ð¾Ñ",
+            "type": "boolean"
+          },
+          "last_activity_time": {
+            "description": "ÐÑÐµÐ¼Ñ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð°ÐºÑÐ¸Ð²Ð½Ð¾ÑÑÐ¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ° Ð² MAX (Unix-Ð²ÑÐµÐ¼Ñ Ð² Ð¼Ð¸Ð»Ð»Ð¸ÑÐµÐºÑÐ½Ð´Ð°Ñ). ÐÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¾ÑÐºÐ»ÑÑÐ¸Ð» Ð² Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÐ°Ñ Ð¿ÑÐ¾ÑÐ¸Ð»Ñ Ð¼ÐµÑÑÐµÐ½Ð´Ð¶ÐµÑÐ° MAX Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÑ Ð²Ð¸Ð´ÐµÑÑ, ÑÑÐ¾ Ð¾Ð½ Ð² ÑÐµÑÐ¸ Ð¾Ð½Ð»Ð°Ð¹Ð½, Ð¿Ð¾Ð»Ðµ Ð¼Ð¾Ð¶ÐµÑ Ð½Ðµ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÑÑÑÑ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "description": "_Ð£ÑÑÐ°ÑÐµÐ²ÑÐµÐµ Ð¿Ð¾Ð»Ðµ, ÑÐºÐ¾ÑÐ¾ Ð±ÑÐ´ÐµÑ ÑÐ´Ð°Ð»ÐµÐ½Ð¾_",
+            "type": "string",
+            "readOnly": false,
+            "nullable": true
+          }
+        },
+        "required": [
+          "user_id",
+          "first_name",
+          "username",
+          "is_bot",
+          "last_activity_time",
+          "name"
+        ]
+      },
+      "UserWithPhoto": {
+        "description": "ÐÐ±ÑÐµÐºÑ Ñ Ð¾Ð±ÑÐµÐ¹ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸ÐµÐ¹ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐµ, Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/User"
+          },
+          {
+            "properties": {
+              "description": {
+                "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ°. Ð ÑÐ»ÑÑÐ°Ðµ Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¼ Ð¼Ð¾Ð¶ÐµÑ Ð¿ÑÐ¸Ð½Ð¸Ð¼Ð°ÑÑ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ `null`, ÐµÑÐ»Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð½Ðµ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾",
+                "maxLength": 16000,
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              },
+              "avatar_url": {
+                "description": "URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ° Ð² ÑÐ¼ÐµÐ½ÑÑÐµÐ½Ð½Ð¾Ð¼ ÑÐ°Ð·Ð¼ÐµÑÐµ",
+                "type": "string",
+                "readOnly": false
+              },
+              "full_avatar_url": {
+                "description": "URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐ° Ð² Ð¿Ð¾Ð»Ð½Ð¾Ð¼ ÑÐ°Ð·Ð¼ÐµÑÐµ",
+                "type": "string",
+                "readOnly": false
+              }
+            }
+          }
+        ]
+      },
+      "BotInfo": {
+        "description": "ÐÐ±ÑÐµÐºÑ Ð²ÐºÐ»ÑÑÐ°ÐµÑ Ð¾Ð±ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð±Ð¾ÑÐµ, URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ. ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ ÑÐ¿Ð¸ÑÐ¾Ðº ÐºÐ¾Ð¼Ð°Ð½Ð´, Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÑ Ð±Ð¾ÑÐ¾Ð¼. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð²ÑÐ·Ð¾Ð²Ðµ Ð¼ÐµÑÐ¾Ð´Ð° `GET /me`",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UserWithPhoto"
+          },
+          {
+            "properties": {
+              "commands": {
+                "description": "ÐÐ¾Ð¼Ð°Ð½Ð´Ñ, Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÐµ Ð±Ð¾ÑÐ¾Ð¼",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BotCommand"
+                },
+                "maxItems": 32,
+                "readOnly": false,
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "BotPatch": {
+        "properties": {
+          "first_name": {
+            "description": "ÐÑÐ¾Ð±ÑÐ°Ð¶Ð°ÐµÐ¼Ð¾Ðµ Ð¸Ð¼Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð»Ð¸ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð±Ð¾ÑÐ°",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "readOnly": false,
+            "nullable": true
+          },
+          "last_name": {
+            "description": "ÐÑÐ¾Ð±ÑÐ°Ð¶Ð°ÐµÐ¼Ð¾Ðµ Ð²ÑÐ¾ÑÐ¾Ðµ Ð¸Ð¼Ñ Ð±Ð¾ÑÐ°",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "readOnly": false,
+            "nullable": true
+          },
+          "name": {
+            "description": "_ÐÐ¾Ð»Ðµ ÑÑÑÐ°ÑÐµÐ»Ð¾, ÑÐºÐ¾ÑÐ¾ Ð±ÑÐ´ÐµÑ ÑÐ´Ð°Ð»ÐµÐ½Ð¾. ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ_ `first_name`",
+            "type": "string",
+            "readOnly": false,
+            "nullable": true
+          },
+          "description": {
+            "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð±Ð¾ÑÐ°",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "readOnly": false,
+            "nullable": true
+          },
+          "commands": {
+            "description": "ÐÐ¾Ð¼Ð°Ð½Ð´Ñ, Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÐµ Ð±Ð¾ÑÐ¾Ð¼. Ð§ÑÐ¾Ð±Ñ ÑÐ´Ð°Ð»Ð¸ÑÑ Ð²ÑÐµ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ, Ð¿ÐµÑÐµÐ´Ð°Ð¹ÑÐµ Ð¿ÑÑÑÐ¾Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BotCommand"
+            },
+            "maxItems": 32,
+            "readOnly": false,
+            "nullable": true
+          },
+          "photo": {
+            "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° ÑÑÑÐ°Ð½Ð¾Ð²ÐºÑ ÑÐ¾ÑÐ¾ Ð±Ð¾ÑÐ°",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PhotoAttachmentRequestPayload"
+              }
+            ],
+            "readOnly": false,
+            "nullable": true
+          }
+        }
+      },
+      "BotCommand": {
+        "description": "Ð´Ð¾ 32 ÑÐ»ÐµÐ¼ÐµÐ½ÑÐ¾Ð²<br/>ÐÐ¾Ð¼Ð°Ð½Ð´Ñ, Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÐµ Ð±Ð¾ÑÐ¾Ð¼",
+        "properties": {
+          "name": {
+            "description": "ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "description": {
+            "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "readOnly": false,
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "Chat": {
+        "properties": {
+          "chat_id": {
+            "description": "ID ÑÐ°ÑÐ°",
+            "type": "integer",
+            "format": "int64"
+          },
+          "type": {
+            "description": "Ð¢Ð¸Ð¿ ÑÐ°ÑÐ°:\n - `\"chat\"` â ÐÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÑÐ°Ñ.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChatType"
+              }
+            ]
+          },
+          "status": {
+            "description": "Ð¡ÑÐ°ÑÑÑ ÑÐ°ÑÐ°:\n- `\"active\"` â ÐÐ¾Ñ ÑÐ²Ð»ÑÐµÑÑÑ Ð°ÐºÑÐ¸Ð²Ð½ÑÐ¼ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð¼ ÑÐ°ÑÐ°.\n- `\"removed\"` â ÐÐ¾Ñ Ð±ÑÐ» ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð· ÑÐ°ÑÐ°.\n- `\"left\"` â ÐÐ¾Ñ Ð¿Ð¾ÐºÐ¸Ð½ÑÐ» ÑÐ°Ñ.\n- `\"closed\"` â Ð§Ð°Ñ Ð±ÑÐ» Ð·Ð°ÐºÑÑÑ.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChatStatus"
+              }
+            ]
+          },
+          "title": {
+            "description": "ÐÑÐ¾Ð±ÑÐ°Ð¶Ð°ÐµÐ¼Ð¾Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ ÑÐ°ÑÐ°. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null` Ð´Ð»Ñ Ð´Ð¸Ð°Ð»Ð¾Ð³Ð¾Ð²",
+            "type": "string",
+            "nullable": true
+          },
+          "icon": {
+            "description": "ÐÐºÐ¾Ð½ÐºÐ° ÑÐ°ÑÐ°",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Image"
+              }
+            ]
+          },
+          "last_event_time": {
+            "description": "ÐÑÐµÐ¼Ñ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ³Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ñ Ð² ÑÐ°ÑÐµ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "participants_count": {
+            "description": "ÐÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² ÑÐ°ÑÐ°. ÐÐ»Ñ Ð´Ð¸Ð°Ð»Ð¾Ð³Ð¾Ð² Ð²ÑÐµÐ³Ð´Ð° `2`",
+            "type": "integer",
+            "format": "int32"
+          },
+          "owner_id": {
+            "description": "ID Ð²Ð»Ð°Ð´ÐµÐ»ÑÑÐ° ÑÐ°ÑÐ°",
+            "nullable": true,
+            "type": "integer",
+            "format": "int64",
+            "readOnly": false
+          },
+          "participants": {
+            "description": "Ð£ÑÐ°ÑÑÐ½Ð¸ÐºÐ¸ ÑÐ°ÑÐ° Ñ Ð²ÑÐµÐ¼ÐµÐ½ÐµÐ¼ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð°ÐºÑÐ¸Ð²Ð½Ð¾ÑÑÐ¸. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÑÑÑ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ°ÑÐ¾Ð²",
+            "nullable": true,
+            "readOnly": false,
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "is_public": {
+            "description": "ÐÐ¾ÑÑÑÐ¿ÐµÐ½ Ð»Ð¸ ÑÐ°Ñ Ð¿ÑÐ±Ð»Ð¸ÑÐ½Ð¾ (Ð´Ð»Ñ Ð´Ð¸Ð°Ð»Ð¾Ð³Ð¾Ð² Ð²ÑÐµÐ³Ð´Ð° `false`)",
+            "type": "boolean"
+          },
+          "link": {
+            "description": "Ð¡ÑÑÐ»ÐºÐ° Ð½Ð° ÑÐ°Ñ",
+            "type": "string",
+            "readOnly": false,
+            "nullable": true
+          },
+          "description": {
+            "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ ÑÐ°ÑÐ°",
+            "type": "string",
+            "nullable": true
+          },
+          "dialog_with_user": {
+            "description": "ÐÐ°Ð½Ð½ÑÐµ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð² Ð´Ð¸Ð°Ð»Ð¾Ð³Ðµ (ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ ÑÐ°ÑÐ¾Ð² ÑÐ¸Ð¿Ð° `\"dialog\"`)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserWithPhoto"
+              }
+            ],
+            "nullable": true,
+            "readOnly": false
+          },
+          "chat_message_id": {
+            "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ, ÑÐ¾Ð´ÐµÑÐ¶Ð°ÑÐµÐ³Ð¾ ÐºÐ½Ð¾Ð¿ÐºÑ, ÑÐµÑÐµÐ· ÐºÐ¾ÑÐ¾ÑÑÑ Ð±ÑÐ» Ð¸Ð½Ð¸ÑÐ¸Ð¸ÑÐ¾Ð²Ð°Ð½ ÑÐ°Ñ",
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          },
+          "pinned_message": {
+            "description": "ÐÐ°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² ÑÐ°ÑÐµ (Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð·Ð°Ð¿ÑÐ¾ÑÐµ ÐºÐ¾Ð½ÐºÑÐµÑÐ½Ð¾Ð³Ð¾ ÑÐ°ÑÐ°)",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ]
+          }
+        },
+        "required": [
+          "chat_id",
+          "type",
+          "status",
+          "title",
+          "last_event_time",
+          "participants_count",
+          "icon",
+          "is_public",
+          "description"
+        ]
+      },
+      "ChatType": {
+        "description": "Ð¢Ð¸Ð¿ ÑÐ°ÑÐ°: Ð´Ð¸Ð°Ð»Ð¾Ð³, ÑÐ°Ñ",
+        "enum": [
+          "chat"
+        ]
+      },
+      "ChatStatus": {
+        "description": "Ð¡ÑÐ°ÑÑÑ ÑÐ°ÑÐ° Ð´Ð»Ñ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð±Ð¾ÑÐ°",
+        "enum": [
+          "active",
+          "removed",
+          "left",
+          "closed"
+        ]
+      },
+      "ChatList": {
+        "properties": {
+          "chats": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÑ ÑÐ°ÑÐ¾Ð²",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Chat"
+            }
+          },
+          "marker": {
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð·Ð°Ð¿ÑÐ°ÑÐ¸Ð²Ð°ÐµÐ¼ÑÑ ÑÐ°ÑÐ¾Ð²",
+            "nullable": true,
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "chats",
+          "marker"
+        ]
+      },
+      "ChatPatch": {
+        "properties": {
+          "icon": {
+            "readOnly": false,
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PhotoAttachmentRequestPayload"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "readOnly": false,
+            "nullable": true
+          },
+          "pin": {
+            "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð´Ð»Ñ Ð·Ð°ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ñ Ð² ÑÐ°ÑÐµ. Ð§ÑÐ¾Ð±Ñ ÑÐ´Ð°Ð»Ð¸ÑÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ, Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ Ð¼ÐµÑÐ¾Ð´ [unpin](/docs-api/methods/DELETE/chats/%7BchatId%7D/pin)",
+            "type": "string",
+            "readOnly": false,
+            "nullable": true
+          },
+          "notify": {
+            "description": "ÐÑÐ»Ð¸ `true`, ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¸ Ð¿Ð¾Ð»ÑÑÐ°Ñ ÑÐ¸ÑÑÐµÐ¼Ð½Ð¾Ðµ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ð¾Ð± Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¸",
+            "type": "boolean",
+            "default": true,
+            "readOnly": false,
+            "nullable": true
+          }
+        }
+      },
+      "ChatMember": {
+        "description": "ÐÐ±ÑÐµÐºÑ Ð²ÐºÐ»ÑÑÐ°ÐµÑ Ð¾Ð±ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð¸Ð»Ð¸ Ð±Ð¾ÑÐµ, URL Ð°Ð²Ð°ÑÐ°ÑÐ° Ð¸ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ (Ð¿ÑÐ¸ Ð½Ð°Ð»Ð¸ÑÐ¸Ð¸). ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ Ð´Ð°Ð½Ð½ÑÐµ Ð´Ð»Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹-ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² ÑÐ°ÑÐ°. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð²ÑÐ·Ð¾Ð²Ðµ Ð½ÐµÐºÐ¾ÑÐ¾ÑÑÑ Ð¼ÐµÑÐ¾Ð´Ð¾Ð² Ð³ÑÑÐ¿Ð¿Ñ `/chats`, Ð½Ð°Ð¿ÑÐ¸Ð¼ÐµÑ [`GET /chats/{chatId}/members`](/docs-api/methods/GET/chats/-chatId-/members)",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UserWithPhoto"
+          },
+          {
+            "properties": {
+              "last_access_time": {
+                "description": "ÐÑÐµÐ¼Ñ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð°ÐºÑÐ¸Ð²Ð½Ð¾ÑÑÐ¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ°ÑÐµ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ ÑÑÑÐ°ÑÐµÐ²ÑÐ¸Ð¼ Ð´Ð»Ñ ÑÑÐ¿ÐµÑÑÐ°ÑÐ¾Ð² (ÑÐ°Ð²Ð½Ð¾ Ð²ÑÐµÐ¼ÐµÐ½Ð¸ Ð²ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ñ)",
+                "type": "integer",
+                "format": "int64"
+              },
+              "is_owner": {
+                "type": "boolean",
+                "description": "Ð¯Ð²Ð»ÑÐµÑÑÑ Ð»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð²Ð»Ð°Ð´ÐµÐ»ÑÑÐµÐ¼ ÑÐ°ÑÐ°"
+              },
+              "is_admin": {
+                "type": "boolean",
+                "description": "Ð¯Ð²Ð»ÑÐµÑÑÑ Ð»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼ ÑÐ°ÑÐ°"
+              },
+              "join_time": {
+                "type": "integer",
+                "format": "int64",
+                "description": "ÐÐ°ÑÐ° Ð¿ÑÐ¸ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ñ Ðº ÑÐ°ÑÑ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ Unix time"
+              },
+              "permissions": {
+                "description": "ÐÐµÑÐµÑÐµÐ½Ñ Ð¿ÑÐ°Ð² Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ. ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ:\n- `\"read_all_messages\"` â Ð§Ð¸ÑÐ°ÑÑ Ð²ÑÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ.\n- `\"add_remove_members\"` â ÐÐ¾Ð±Ð°Ð²Ð»ÑÑÑ/ÑÐ´Ð°Ð»ÑÑÑ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð².\n- `\"add_admins\"` â ÐÐ¾Ð±Ð°Ð²Ð»ÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð².\n- `\"change_chat_info\"` â ÐÐ·Ð¼ÐµÐ½ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ°ÑÐµ.\n- `\"pin_message\"` â ÐÐ°ÐºÑÐµÐ¿Ð»ÑÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ.\n- `\"write\"` â ÐÐ¸ÑÐ°ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ.\n- `\"edit_link\"` â ÐÐ·Ð¼ÐµÐ½ÑÑÑ ÑÑÑÐ»ÐºÑ Ð½Ð° ÑÐ°Ñ.\n",
+                "type": "array",
+                "uniqueItems": true,
+                "nullable": true,
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatAdminPermission"
+                    }
+                  ]
+                }
+              },
+              "alias": {
+                "description": "ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð±ÑÐ´ÐµÑ Ð¿Ð¾ÐºÐ°Ð·Ð°Ð½ Ð½Ð° ÐºÐ»Ð¸ÐµÐ½ÑÐµ\n\nÐÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ Ð¸Ð»Ð¸ Ð²Ð»Ð°Ð´ÐµÐ»ÐµÑ Ð¸ ÐµÐ¼Ñ Ð½Ðµ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ ÑÑÐ¾ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ, ÑÐ¾ Ð¿Ð¾Ð»Ðµ Ð½Ðµ Ð¿ÐµÑÐµÐ´Ð°ÑÑÑÑ, ÐºÐ»Ð¸ÐµÐ½ÑÑ Ð½Ð° ÑÐ²Ð¾ÐµÐ¹ ÑÑÐ¾ÑÐ¾Ð½Ðµ Ð¿Ð¾Ð´Ð¼ÐµÐ½ÑÑ Ð½Ð° \"Ð²Ð»Ð°Ð´ÐµÐ»ÐµÑ\" Ð¸Ð»Ð¸ \"Ð°Ð´Ð¼Ð¸Ð½\"",
+                "type": "string"
+              }
+            },
+            "required": [
+              "last_access_time",
+              "is_owner",
+              "is_admin",
+              "permissions",
+              "join_time"
+            ]
+          }
+        ]
+      },
+      "ChatAdmin": {
+        "properties": {
+          "user_id": {
+            "description": "ÐÐ´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ-ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ° ÑÐ°ÑÐ°, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð½Ð°Ð·Ð½Ð°ÑÐ°ÐµÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼\n\nÐÐ°ÐºÑÐ¸Ð¼ÑÐ¼ â 50 Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð² Ð² ÑÐ°ÑÐµ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "permissions": {
+            "description": "ÐÐµÑÐµÑÐµÐ½Ñ Ð¿ÑÐ°Ð² Ð´Ð¾ÑÑÑÐ¿Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ. ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ:\n- `\"read_all_messages\"` â Ð§Ð¸ÑÐ°ÑÑ Ð²ÑÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. Ð­ÑÐ¾ Ð¿ÑÐ°Ð²Ð¾ Ð²Ð°Ð¶Ð½Ð¾ Ð¿ÑÐ¸ Ð½Ð°Ð·Ð½Ð°ÑÐµÐ½Ð¸Ð¸ Ð±Ð¾ÑÐ¾Ð²: Ð±ÐµÐ· Ð½ÐµÐ³Ð¾ Ð±Ð¾Ñ Ð½Ðµ Ð±ÑÐ´ÐµÑ Ð¿Ð¾Ð»ÑÑÐ°ÑÑ Ð°Ð¿Ð´ÐµÐ¹ÑÑ (Ð²ÐµÐ±ÑÑÐºÐ¸) Ð² Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð¼ ÑÐ°ÑÐµ\n- `\"add_remove_members\"` â ÐÐ¾Ð±Ð°Ð²Ð»ÑÑÑ/ÑÐ´Ð°Ð»ÑÑÑ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð²\n- `\"add_admins\"` â ÐÐ¾Ð±Ð°Ð²Ð»ÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð²\n- `\"change_chat_info\"` â ÐÐ·Ð¼ÐµÐ½ÑÑÑ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÑÐ°ÑÐµ\n- `\"pin_message\"` â ÐÐ°ÐºÑÐµÐ¿Ð»ÑÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n- `\"write\"` â ÐÐ¸ÑÐ°ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n- `\"can_call\"` â Ð¡Ð¾Ð²ÐµÑÑÐ°ÑÑ Ð·Ð²Ð¾Ð½ÐºÐ¸\n- `\"edit_link\"` â ÐÐ·Ð¼ÐµÐ½ÑÑÑ ÑÑÑÐ»ÐºÑ Ð½Ð° ÑÐ°Ñ\n- `\"post_edit_delete_message\"` â ÐÑÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°ÑÑ, ÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°ÑÑ Ð¸ ÑÐ´Ð°Ð»ÑÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n- `\"edit_message\"` â Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n- `\"delete_message\"` â Ð£Ð´Ð°Ð»ÑÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ\n\nÐÑÐ»Ð¸ Ð¿ÑÐ°Ð²Ð¾ Ð½Ð°Ð·Ð½Ð°ÑÐ°ÐµÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÑ, ÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÑÑÑÑ ÐµÐ³Ð¾ ÑÐµÐºÑÑÐ¸Ðµ Ð¿ÑÐ°Ð²Ð° Ð´Ð¾ÑÑÑÐ¿Ð°",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ChatAdminPermission"
+                }
+              ]
+            }
+          },
+          "alias": {
+            "description": "ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð±ÑÐ´ÐµÑ Ð¿Ð¾ÐºÐ°Ð·Ð°Ð½ Ð½Ð° ÐºÐ»Ð¸ÐµÐ½ÑÐµ\n\nÐÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ Ð¸Ð»Ð¸ Ð²Ð»Ð°Ð´ÐµÐ»ÐµÑ Ð¸ ÐµÐ¼Ñ Ð½Ðµ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ ÑÑÐ¾ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ, ÑÐ¾ Ð¿Ð¾Ð»Ðµ Ð½Ðµ Ð¿ÐµÑÐµÐ´Ð°ÑÑÑÑ, ÐºÐ»Ð¸ÐµÐ½ÑÑ Ð½Ð° ÑÐ²Ð¾ÐµÐ¹ ÑÑÐ¾ÑÐ¾Ð½Ðµ Ð¿Ð¾Ð´Ð¼ÐµÐ½ÑÑ Ð½Ð° \"Ð²Ð»Ð°Ð´ÐµÐ»ÐµÑ\" Ð¸Ð»Ð¸ \"Ð°Ð´Ð¼Ð¸Ð½\"",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "permissions"
+        ]
+      },
+      "ChatAdminPermission": {
+        "description": "ÐÑÐ°Ð²Ð° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ° ÑÐ°ÑÐ°",
+        "type": "string",
+        "enum": [
+          "read_all_messages",
+          "add_remove_members",
+          "add_admins",
+          "change_chat_info",
+          "pin_message",
+          "write",
+          "can_call",
+          "edit_link",
+          "post_edit_delete_message",
+          "edit_message",
+          "delete_message"
+        ]
+      },
+      "ChatMembersList": {
+        "properties": {
+          "members": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² ÑÐ°ÑÐ° Ñ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸ÐµÐ¹ Ð¾ Ð²ÑÐµÐ¼ÐµÐ½Ð¸ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð°ÐºÑÐ¸Ð²Ð½Ð¾ÑÑÐ¸",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMember"
+            }
+          },
+          "marker": {
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ",
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "readOnly": false
+          }
+        },
+        "required": [
+          "members"
+        ]
+      },
+      "ChatAdminsList": {
+        "properties": {
+          "admins": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹, ÐºÐ¾ÑÐ¾ÑÑÐµ Ð¿Ð¾Ð»ÑÑÐ°Ñ Ð¿ÑÐ°Ð²Ð° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ° ÑÐ°ÑÐ°",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatAdmin"
+            }
+          },
+          "marker": {
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ",
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "readOnly": false
+          }
+        },
+        "required": [
+          "admins"
+        ]
+      },
+      "Image": {
+        "description": "ÐÐ±ÑÐ°Ñ ÑÑÐµÐ¼Ð°, Ð¾Ð¿Ð¸ÑÑÐ²Ð°ÑÑÐ°Ñ Ð¾Ð±ÑÐµÐºÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+        "properties": {
+          "url": {
+            "description": "URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "Subscription": {
+        "description": "Ð¡ÑÐµÐ¼Ð° Ð´Ð»Ñ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ Ð½Ð° WebHook",
+        "properties": {
+          "url": {
+            "description": "URL Ð²ÐµÐ±ÑÑÐºÐ°",
+            "type": "string"
+          },
+          "time": {
+            "description": "Unix-Ð²ÑÐµÐ¼Ñ, ÐºÐ¾Ð³Ð´Ð° Ð±ÑÐ»Ð° ÑÐ¾Ð·Ð´Ð°Ð½Ð° Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ°",
+            "type": "integer",
+            "format": "int64"
+          },
+          "update_types": {
+            "description": "Ð¢Ð¸Ð¿Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹, Ð½Ð° ÐºÐ¾ÑÐ¾ÑÑÐµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ°Ð½ Ð±Ð¾Ñ",
+            "example": "[\"message_created\", \"bot_started\"]",
+            "type": "array",
+            "nullable": true,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "url",
+          "time",
+          "update_types",
+          "version"
+        ]
+      },
+      "Recipient": {
+        "description": "ÐÐ¾Ð²ÑÐ¹ Ð¿Ð¾Ð»ÑÑÐ°ÑÐµÐ»Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¼ Ð¸Ð»Ð¸ ÑÐ°ÑÐ¾Ð¼",
+        "properties": {
+          "chat_id": {
+            "description": "ID ÑÐ°ÑÐ°",
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "chat_type": {
+            "description": "Ð¢Ð¸Ð¿ ÑÐ°ÑÐ°",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChatType"
+              }
+            ]
+          },
+          "user_id": {
+            "description": "ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐµÑÐ»Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ»Ð¾ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "required": [
+          "chat_id",
+          "chat_type",
+          "user_id"
+        ]
+      },
+      "Message": {
+        "description": "Ð¡Ð¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð² ÑÐ°ÑÐµ",
+        "properties": {
+          "sender": {
+            "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, Ð¾ÑÐ¿ÑÐ°Ð²Ð¸Ð²ÑÐ¸Ð¹ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "readOnly": false
+          },
+          "recipient": {
+            "description": "ÐÐ¾Ð»ÑÑÐ°ÑÐµÐ»Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¼ Ð¸Ð»Ð¸ ÑÐ°ÑÐ¾Ð¼",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Recipient"
+              }
+            ]
+          },
+          "timestamp": {
+            "description": "ÐÑÐµÐ¼Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ Unix-time",
+            "type": "integer",
+            "format": "int64"
+          },
+          "link": {
+            "description": "ÐÐµÑÐµÑÐ»Ð°Ð½Ð½Ð¾Ðµ Ð¸Ð»Ð¸ Ð¾ÑÐ²ÐµÑÐ½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LinkedMessage"
+              }
+            ]
+          },
+          "body": {
+            "description": "Ð¡Ð¾Ð´ÐµÑÐ¶Ð¸Ð¼Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. Ð¢ÐµÐºÑÑ + Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÐµÑÐµÑÐ»Ð°Ð½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageBody"
+              }
+            ]
+          },
+          "stat": {
+            "description": "Ð¡ÑÐ°ÑÐ¸ÑÑÐ¸ÐºÐ° ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ Ð¿Ð¾ÑÑÐ¾Ð² Ð² ÐºÐ°Ð½Ð°Ð»Ð°Ñ",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageStat"
+              }
+            ],
+            "nullable": true,
+            "readOnly": false
+          },
+          "url": {
+            "description": "ÐÑÐ±Ð»Ð¸ÑÐ½Ð°Ñ ÑÑÑÐ»ÐºÐ° Ð½Ð° Ð¿Ð¾ÑÑ Ð² ÐºÐ°Ð½Ð°Ð»Ðµ. ÐÑÑÑÑÑÑÐ²ÑÐµÑ Ð´Ð»Ñ Ð´Ð¸Ð°Ð»Ð¾Ð³Ð¾Ð² Ð¸ Ð³ÑÑÐ¿Ð¿Ð¾Ð²ÑÑ ÑÐ°ÑÐ¾Ð²",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          }
+        },
+        "required": [
+          "recipient",
+          "body",
+          "timestamp"
+        ]
+      },
+      "MessageStat": {
+        "description": "Ð¡ÑÐ°ÑÐ¸ÑÑÐ¸ÐºÐ° ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ Ð¿Ð¾ÑÑÐ¾Ð² Ð² ÐºÐ°Ð½Ð°Ð»Ð°Ñ",
+        "properties": {
+          "views": {
+            "description": "ÐÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹, ÐºÐ¾ÑÐ¾ÑÑÐµ ÑÐ²Ð¸Ð´ÐµÐ»Ð¸ Ð¿Ð¾ÑÑ Ð² ÐºÐ°Ð½Ð°Ð»Ðµ. ÐÑÐ¾ÑÐ¼Ð¾ÑÑ Ð·Ð°ÑÑÐ¸ÑÑÐ²Ð°ÐµÑÑÑ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾ÑÑ Ð¿Ð¾Ð¿Ð°Ð´Ð°ÐµÑ Ð² Ð¾Ð±Ð»Ð°ÑÑÑ Ð²Ð¸Ð´Ð¸Ð¼Ð¾ÑÑÐ¸ ÑÐºÑÐ°Ð½Ð°",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "views"
+        ]
+      },
+      "MessageBody": {
+        "description": "Ð¡ÑÐµÐ¼Ð°, Ð¿ÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÑÑÐ°Ñ ÑÐµÐ»Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "type": "object",
+        "properties": {
+          "mid": {
+            "description": "Ð£Ð½Ð¸ÐºÐ°Ð»ÑÐ½ÑÐ¹ ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "type": "string"
+          },
+          "seq": {
+            "description": "ID Ð¿Ð¾ÑÐ»ÐµÐ´Ð¾Ð²Ð°ÑÐµÐ»ÑÐ½Ð¾ÑÑÐ¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² ÑÐ°ÑÐµ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "text": {
+            "description": "ÐÐ¾Ð²ÑÐ¹ ÑÐµÐºÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "type": "string",
+            "nullable": true
+          },
+          "attachments": {
+            "description": "ÐÐ»Ð¾Ð¶ÐµÐ½Ð¸Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ¾Ð³ÑÑ Ð±ÑÑÑ Ð¾Ð´Ð½Ð¸Ð¼ Ð¸Ð· ÑÐ¸Ð¿Ð¾Ð² `Attachment`. Ð¡Ð¼Ð¾ÑÑÐ¸ÑÐµ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ ÑÑÐµÐ¼Ñ",
+            "type": "array",
+            "nullable": true,
+            "required": false,
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "markup": {
+            "description": "Ð Ð°Ð·Ð¼ÐµÑÐºÐ° ÑÐµÐºÑÑÐ° ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐ»Ñ Ð¿Ð¾Ð´ÑÐ¾Ð±Ð½Ð¾Ð¹ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð·Ð°Ð³Ð»ÑÐ½Ð¸ÑÐµ Ð² ÑÐ°Ð·Ð´ÐµÐ» [Ð¤Ð¾ÑÐ¼Ð°ÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ](/docs-api#Ð¤Ð¾ÑÐ¼Ð°ÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ%20ÑÐµÐºÑÑÐ°)",
+            "type": "array",
+            "nullable": true,
+            "readOnly": false,
+            "items": {
+              "$ref": "#/components/schemas/MarkupElement"
+            }
+          }
+        },
+        "required": [
+          "mid",
+          "seq",
+          "text",
+          "attachments",
+          "link"
+        ]
+      },
+      "MessageList": {
+        "description": "ÐÐ°Ð³Ð¸Ð½Ð¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÐ¹ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹",
+        "properties": {
+          "messages": {
+            "description": "ÐÐ°ÑÑÐ¸Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        },
+        "required": [
+          "messages"
+        ]
+      },
+      "TextFormat": {
+        "description": "Ð¤Ð¾ÑÐ¼Ð°Ñ ÑÐµÐºÑÑÐ° ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "type": "string",
+        "enum": [
+          "markdown",
+          "html"
+        ]
+      },
+      "NewMessageBody": {
+        "properties": {
+          "text": {
+            "description": "ÐÐ¾Ð²ÑÐ¹ ÑÐµÐºÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "attachments": {
+            "description": "ÐÐ»Ð¾Ð¶ÐµÐ½Ð¸Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÑÐ»Ð¸ Ð¿ÑÑÑÐ¾, Ð²ÑÐµ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð±ÑÐ´ÑÑ ÑÐ´Ð°Ð»ÐµÐ½Ñ",
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/AttachmentRequest"
+            }
+          },
+          "link": {
+            "description": "Ð¡ÑÑÐ»ÐºÐ° Ð½Ð° ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "type": "object",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewMessageLink"
+              }
+            ]
+          },
+          "notify": {
+            "description": "ÐÑÐ»Ð¸ false, ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¸ ÑÐ°ÑÐ° Ð½Ðµ Ð±ÑÐ´ÑÑ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ñ (Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ `true`)",
+            "type": "boolean",
+            "default": true,
+            "readOnly": false
+          },
+          "format": {
+            "description": "ÐÑÐ»Ð¸ ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½, ÑÐµÐºÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð±ÑÐ´ÐµÑ ÑÐ¾ÑÐ¼Ð°ÑÐ¸ÑÐ¾Ð²Ð°Ð½ Ð´Ð°Ð½Ð½ÑÐ¼ ÑÐ¿Ð¾ÑÐ¾Ð±Ð¾Ð¼. ÐÐ»Ñ Ð¿Ð¾Ð´ÑÐ¾Ð±Ð½Ð¾Ð¹ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ð¸ Ð·Ð°Ð³Ð»ÑÐ½Ð¸ÑÐµ Ð² ÑÐ°Ð·Ð´ÐµÐ» [Ð¤Ð¾ÑÐ¼Ð°ÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ](/docs-api#Ð¤Ð¾ÑÐ¼Ð°ÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ%20ÑÐµÐºÑÑÐ°)",
+            "readOnly": false,
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TextFormat"
+              }
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "attachments",
+          "link"
+        ]
+      },
+      "NewMessageLink": {
+        "properties": {
+          "type": {
+            "description": "Ð¢Ð¸Ð¿ ÑÑÑÐ»ÐºÐ¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "nullable": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageLinkType"
+              }
+            ]
+          },
+          "mid": {
+            "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð¸ÑÑÐ¾Ð´Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "type": "string",
+            "nullable": false
+          }
+        },
+        "required": [
+          "type",
+          "mid"
+        ]
+      },
+      "LinkedMessage": {
+        "properties": {
+          "type": {
+            "description": "Ð¢Ð¸Ð¿ ÑÐ²ÑÐ·Ð°Ð½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageLinkType"
+              }
+            ]
+          },
+          "sender": {
+            "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, Ð¾ÑÐ¿ÑÐ°Ð²Ð¸Ð²ÑÐ¸Ð¹ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "readOnly": false
+          },
+          "chat_id": {
+            "description": "Ð§Ð°Ñ, Ð² ÐºÐ¾ÑÐ¾ÑÐ¾Ð¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ»Ð¾ Ð¸Ð·Ð½Ð°ÑÐ°Ð»ÑÐ½Ð¾ Ð¾Ð¿ÑÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°Ð½Ð¾. Ð¢Ð¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ Ð¿ÐµÑÐµÑÐ»Ð°Ð½Ð½ÑÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¹",
+            "type": "integer",
+            "format": "int64",
+            "readOnly": false
+          },
+          "message": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageBody"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ]
+      },
+      "SendMessageResult": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Attachment": {
+        "description": "ÐÐ±ÑÐ°Ñ ÑÑÐµÐ¼Ð°, Ð¿ÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÑÑÐ°Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "image": "#/components/schemas/PhotoAttachment",
+            "video": "#/components/schemas/VideoAttachment",
+            "audio": "#/components/schemas/AudioAttachment",
+            "file": "#/components/schemas/FileAttachment",
+            "sticker": "#/components/schemas/StickerAttachment",
+            "contact": "#/components/schemas/ContactAttachment",
+            "inline_keyboard": "#/components/schemas/InlineKeyboardAttachment",
+            "share": "#/components/schemas/ShareAttachment",
+            "location": "#/components/schemas/LocationAttachment"
+          }
+        },
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "PhotoAttachment": {
+        "description": "ÐÐ»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PhotoAttachmentPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "PhotoAttachmentPayload": {
+        "properties": {
+          "photo_id": {
+            "description": "Ð£Ð½Ð¸ÐºÐ°Ð»ÑÐ½ÑÐ¹ ID ÑÑÐ¾Ð³Ð¾ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "description": "",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photo_id",
+          "url",
+          "token"
+        ]
+      },
+      "VideoAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MediaAttachmentPayload"
+                  }
+                ]
+              },
+              "thumbnail": {
+                "description": "ÐÐ¸Ð½Ð¸Ð°ÑÑÑÐ° Ð²Ð¸Ð´ÐµÐ¾",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/VideoThumbnail"
+                  }
+                ]
+              },
+              "width": {
+                "description": "Ð¨Ð¸ÑÐ¸Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾",
+                "type": "integer",
+                "nullable": true,
+                "readOnly": false
+              },
+              "height": {
+                "description": "ÐÑÑÐ¾ÑÐ° Ð²Ð¸Ð´ÐµÐ¾",
+                "type": "integer",
+                "nullable": true,
+                "readOnly": false
+              },
+              "duration": {
+                "description": "ÐÐ»Ð¸Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐµÐºÑÐ½Ð´Ð°Ñ",
+                "type": "integer",
+                "nullable": true,
+                "readOnly": false
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "VideoThumbnail": {
+        "properties": {
+          "url": {
+            "description": "URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "VideoUrls": {
+        "properties": {
+          "mp4_1080": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 1080p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "mp4_720": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 720p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "mp4_480": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 480p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "mp4_360": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 360p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "mp4_240": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 240p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "mp4_144": {
+            "description": "URL Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐ°Ð·ÑÐµÑÐµÐ½Ð¸Ð¸ 144p, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "hls": {
+            "description": "URL ÑÑÐ°Ð½ÑÐ»ÑÑÐ¸Ð¸, ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑÑÐ¿Ð½Ð°",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          }
+        }
+      },
+      "VideoAttachmentDetails": {
+        "properties": {
+          "token": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ Ð²Ð¸Ð´ÐµÐ¾-Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string"
+          },
+          "urls": {
+            "description": "URL-Ñ Ð´Ð»Ñ ÑÐºÐ°ÑÐ¸Ð²Ð°Ð½Ð¸Ñ Ð¸Ð»Ð¸ Ð²Ð¾ÑÐ¿ÑÐ¾Ð¸Ð·Ð²ÐµÐ´ÐµÐ½Ð¸Ñ Ð²Ð¸Ð´ÐµÐ¾. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ null, ÐµÑÐ»Ð¸ Ð²Ð¸Ð´ÐµÐ¾ Ð½ÐµÐ´Ð¾ÑÑÑÐ¿Ð½Ð¾",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VideoUrls"
+              }
+            ]
+          },
+          "thumbnail": {
+            "description": "ÐÐ¸Ð½Ð¸Ð°ÑÑÑÐ° Ð²Ð¸Ð´ÐµÐ¾",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PhotoAttachmentPayload"
+              }
+            ]
+          },
+          "width": {
+            "description": "Ð¨Ð¸ÑÐ¸Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾",
+            "type": "integer"
+          },
+          "height": {
+            "description": "ÐÑÑÐ¾ÑÐ° Ð²Ð¸Ð´ÐµÐ¾",
+            "type": "integer"
+          },
+          "duration": {
+            "description": "ÐÐ»Ð¸Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾ Ð² ÑÐµÐºÑÐ½Ð´Ð°Ñ",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height",
+          "duration",
+          "token"
+        ]
+      },
+      "AudioAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MediaAttachmentPayload"
+                  }
+                ]
+              },
+              "transcription": {
+                "description": "ÐÑÐ´Ð¸Ð¾ ÑÑÐ°Ð½ÑÐºÑÐ¸Ð¿ÑÐ¸Ñ",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "FileAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FileAttachmentPayload"
+                  }
+                ]
+              },
+              "filename": {
+                "description": "ÐÐ¼Ñ Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð½Ð¾Ð³Ð¾ ÑÐ°Ð¹Ð»Ð°",
+                "type": "string"
+              },
+              "size": {
+                "description": "Ð Ð°Ð·Ð¼ÐµÑ ÑÐ°Ð¹Ð»Ð° Ð² Ð±Ð°Ð¹ÑÐ°Ñ",
+                "type": "integer",
+                "format": "int64"
+              }
+            },
+            "required": [
+              "payload",
+              "filename",
+              "size"
+            ]
+          }
+        ]
+      },
+      "AttachmentPayload": {
+        "properties": {
+          "url": {
+            "description": "URL Ð¼ÐµÐ´Ð¸Ð°-Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ. Ð­ÑÐ¾Ñ URL Ð±ÑÐ´ÐµÑ Ð¿Ð¾Ð»ÑÑÐµÐ½ Ð² Ð¾Ð±ÑÐµÐºÑÐµ [Update](/docs-api/objects/Update) Ð¿Ð¾ÑÐ»Ðµ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² ÑÐ°Ñ.\n\nÐÑÑÐ¼ÑÑ ÑÑÑÐ»ÐºÑ Ð½Ð° Ð²Ð¸Ð´ÐµÐ¾ ÑÐ°ÐºÐ¶Ðµ Ð¼Ð¾Ð¶Ð½Ð¾ Ð¿Ð¾Ð»ÑÑÐ¸ÑÑ Ñ Ð¿Ð¾Ð¼Ð¾ÑÑÑ Ð¼ÐµÑÐ¾Ð´Ð° [`GET /videos/{-videoToken-}`](/docs-api/methods/GET/videos/-videoToken-)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "MediaAttachmentPayload": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentPayload"
+          },
+          {
+            "properties": {
+              "token": {
+                "description": "ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ `token`, ÐµÑÐ»Ð¸ Ð²Ñ Ð¿ÑÑÐ°ÐµÑÐµÑÑ Ð¿Ð¾Ð²ÑÐ¾ÑÐ½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð¾Ð´Ð½Ð¾ Ð¸ ÑÐ¾ Ð¶Ðµ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð² Ð´ÑÑÐ³Ð¾Ð¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "token"
+            ]
+          }
+        ]
+      },
+      "FileAttachmentPayload": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentPayload"
+          },
+          {
+            "properties": {
+              "token": {
+                "description": "ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ `token`, ÐµÑÐ»Ð¸ Ð²Ñ Ð¿ÑÑÐ°ÐµÑÐµÑÑ Ð¿Ð¾Ð²ÑÐ¾ÑÐ½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð¾Ð´Ð½Ð¾ Ð¸ ÑÐ¾ Ð¶Ðµ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð² Ð´ÑÑÐ³Ð¾Ð¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "token"
+            ]
+          }
+        ]
+      },
+      "ContactAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ContactAttachmentPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "ContactAttachmentPayload": {
+        "properties": {
+          "vcf_info": {
+            "description": "ÐÐ½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ VCF.",
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          },
+          "max_info": {
+            "description": "ÐÐ½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ðµ",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ]
+          }
+        }
+      },
+      "StickerAttachmentPayload": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentPayload"
+          },
+          {
+            "properties": {
+              "code": {
+                "description": "ID ÑÑÐ¸ÐºÐµÑÐ°",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ]
+          }
+        ]
+      },
+      "StickerAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StickerAttachmentPayload"
+                  }
+                ]
+              },
+              "width": {
+                "description": "Ð¨Ð¸ÑÐ¸Ð½Ð° ÑÑÐ¸ÐºÐµÑÐ°",
+                "type": "integer"
+              },
+              "height": {
+                "description": "ÐÑÑÐ¾ÑÐ° ÑÑÐ¸ÐºÐµÑÐ°",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "payload",
+              "width",
+              "height"
+            ]
+          }
+        ]
+      },
+      "ShareAttachmentPayload": {
+        "description": "ÐÐ¾Ð»ÐµÐ·Ð½Ð°Ñ Ð½Ð°Ð³ÑÑÐ·ÐºÐ° Ð·Ð°Ð¿ÑÐ¾ÑÐ° ShareAttachmentRequest",
+        "properties": {
+          "url": {
+            "description": "URL, Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð½ÑÐ¹ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð² ÐºÐ°ÑÐµÑÑÐ²Ðµ Ð¿ÑÐµÐ´Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ° Ð¼ÐµÐ´Ð¸Ð°",
+            "minLength": 1,
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          },
+          "token": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string",
+            "nullable": true,
+            "readOnly": false
+          }
+        }
+      },
+      "ShareAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ShareAttachmentPayload"
+                  }
+                ]
+              },
+              "title": {
+                "description": "ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº Ð¿ÑÐµÐ´Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ° ÑÑÑÐ»ÐºÐ¸.",
+                "type": "string",
+                "readOnly": false,
+                "nullable": true
+              },
+              "description": {
+                "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¿ÑÐµÐ´Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ° ÑÑÑÐ»ÐºÐ¸",
+                "type": "string",
+                "readOnly": false,
+                "nullable": true
+              },
+              "image_url": {
+                "description": "ÐÐ·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ Ð¿ÑÐµÐ´Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ° ÑÑÑÐ»ÐºÐ¸",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "LocationAttachment": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "format": "double",
+                "description": "Ð¨Ð¸ÑÐ¾ÑÐ°"
+              },
+              "longitude": {
+                "type": "number",
+                "format": "double",
+                "description": "ÐÐ¾Ð»Ð³Ð¾ÑÐ°"
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ]
+          }
+        ]
+      },
+      "InlineKeyboardAttachment": {
+        "description": "ÐÐ½Ð¾Ð¿ÐºÐ¸ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Keyboard"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "ReplyKeyboardAttachment": {
+        "description": "Custom reply keyboard in message",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "buttons": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReplyButton"
+                  }
+                }
+              }
+            },
+            "required": [
+              "buttons"
+            ]
+          }
+        ]
+      },
+      "DataAttachment": {
+        "description": "Attachment contains payload sent through `SendMessageButton`",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          {
+            "properties": {
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "data"
+            ]
+          }
+        ]
+      },
+      "Keyboard": {
+        "description": "ÐÐ»Ð°Ð²Ð¸Ð°ÑÑÑÐ° - ÑÑÐ¾ Ð´Ð²ÑÐ¼ÐµÑÐ½ÑÐ¹ Ð¼Ð°ÑÑÐ¸Ð² ÐºÐ½Ð¾Ð¿Ð¾Ðº",
+        "properties": {
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Button"
+              }
+            }
+          }
+        },
+        "required": [
+          "buttons"
+        ]
+      },
+      "Button": {
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "text": {
+            "description": "ÐÐ¸Ð´Ð¸Ð¼ÑÐ¹ ÑÐµÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÐ¸. Ð§ÑÐ¾Ð±Ñ Ð¾Ð½ Ð¾ÑÐ¾Ð±ÑÐ°Ð¶Ð°Ð»ÑÑ Ð¿Ð¾Ð»Ð½Ð¾ÑÑÑÑ, ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´ÑÐµÐ¼ Ð½Ðµ Ð¿ÑÐµÐ²ÑÑÐ°ÑÑ Ð·Ð°Ð´Ð°Ð½Ð½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð² Ð² Ð·Ð°Ð²Ð¸ÑÐ¸Ð¼Ð¾ÑÑÐ¸ Ð¾Ñ ÑÐ°Ð·Ð¼ÐµÑÐµÐ½Ð¸Ñ ÑÐµÐºÑÑÐ°: `20` ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð² â Ð¿ÑÐ¸ 1 ÐºÐ½Ð¾Ð¿ÐºÐµ Ð² ÑÑÐ´Ñ, `10` â Ð¿ÑÐ¸ 2, `5` â Ð¿ÑÐ¸ 3, `3` â Ð¿ÑÐ¸ 4",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "callback": "#/components/schemas/CallbackButton",
+            "link": "#/components/schemas/LinkButton",
+            "request_geo_location": "#/components/schemas/RequestGeoLocationButton",
+            "request_contact": "#/components/schemas/RequestContactButton",
+            "open_app": "#/components/schemas/OpenAppButton",
+            "message": "#/components/schemas/MessageButton",
+            "clipboard": "#/components/schemas/ClipboardButton"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ]
+      },
+      "CallbackButton": {
+        "description": "ÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÐºÐ»Ð¸ÐµÐ½Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð½Ð° ÑÐµÑÐ²ÐµÑ Ð¿Ð¾Ð»ÐµÐ·Ð½ÑÑ Ð½Ð°Ð³ÑÑÐ·ÐºÑ, ÐºÐ¾ÑÐ¾ÑÐ°Ñ ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "payload": {
+                "description": "Ð¢Ð¾ÐºÐµÐ½ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+                "type": "string",
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "LinkButton": {
+        "description": "ÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¿ÐµÑÐµÑÐ¾Ð´Ð¸Ñ Ð¿Ð¾ ÑÑÑÐ»ÐºÐµ, ÐºÐ¾ÑÐ¾ÑÑÑ Ð¾Ð½Ð° ÑÐ¾Ð´ÐµÑÐ¶Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "url": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        ]
+      },
+      "RequestContactButton": {
+        "description": "AÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÐºÐ»Ð¸ÐµÐ½Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð½Ð¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ ÑÐµÐºÑÑÐµÐ³Ð¾ ÐºÐ¾Ð½ÑÐ°ÐºÑÐ° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          }
+        ]
+      },
+      "RequestGeoLocationButton": {
+        "description": "ÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÐºÐ»Ð¸ÐµÐ½Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð½Ð¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð³ÐµÐ¾Ð³ÑÐ°ÑÐ¸ÑÐµÑÐºÐ¾Ð³Ð¾ Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "quick": {
+                "description": "ÐÑÐ»Ð¸ *true*, Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð¼ÐµÑÑÐ¾Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð±ÐµÐ· Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+                "readOnly": false,
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        ]
+      },
+      "ChatButton": {
+        "description": "ÐÐ½Ð¾Ð¿ÐºÐ°, ÐºÐ¾ÑÐ¾ÑÐ°Ñ ÑÐ¾Ð·Ð´Ð°ÐµÑ Ð½Ð¾Ð²ÑÐ¹ ÑÐ°Ñ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÐµÑÐ²ÑÐ¹ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð° Ð½ÐµÐµ Ð½Ð°Ð¶Ð¼ÑÑ.\nBÐÐ¾Ñ Ð±ÑÐ´ÐµÑ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¸ ÑÐ°ÑÐ° ÐºÐ°Ðº Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ.\nMÐÐ²ÑÐ¾Ñ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ ÑÑÐ°Ð½ÐµÑ Ð²Ð»Ð°Ð´ÐµÐ»ÑÑÐµÐ¼ ÑÐ°ÑÐ°.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "chat_title": {
+                "description": "ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ ÑÐ°ÑÐ°, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð±ÑÐ´ÐµÑ ÑÐ¾Ð·Ð´Ð°Ð½",
+                "type": "string",
+                "maxLength": 200
+              },
+              "chat_description": {
+                "description": "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ ÑÐ°ÑÐ°",
+                "readOnly": false,
+                "nullable": true,
+                "type": "string",
+                "maxLength": 400
+              },
+              "start_payload": {
+                "description": "Ð¡ÑÐ°ÑÑÐ¾Ð²Ð°Ñ Ð¿Ð¾Ð»ÐµÐ·Ð½Ð°Ñ Ð½Ð°Ð³ÑÑÐ·ÐºÐ° Ð±ÑÐ´ÐµÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð° Ð±Ð¾ÑÑ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ°Ñ Ð±ÑÐ´ÐµÑ ÑÐ¾Ð·Ð´Ð°Ð½",
+                "readOnly": false,
+                "nullable": true,
+                "type": "string",
+                "maxLength": 512
+              },
+              "uuid": {
+                "description": "Ð£Ð½Ð¸ÐºÐ°Ð»ÑÐ½ÑÐ¹ ID ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÑÐµÐ´Ð¸ Ð²ÑÐµÑ ÐºÐ½Ð¾Ð¿Ð¾Ðº ÑÐ°ÑÐ° Ð½Ð° ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÐµ.\nÐÑÐ»Ð¸ `uuid` Ð¸Ð·Ð¼ÐµÐ½ÑÐ½, Ð½Ð¾Ð²ÑÐ¹ ÑÐ°Ñ Ð±ÑÐ´ÐµÑ ÑÐ¾Ð·Ð´Ð°Ð½ Ð¿ÑÐ¸ ÑÐ»ÐµÐ´ÑÑÑÐµÐ¼ Ð½Ð°Ð¶Ð°ÑÐ¸Ð¸.\nÐ¡ÐµÑÐ²ÐµÑ ÑÐ³ÐµÐ½ÐµÑÐ¸ÑÑÐµÑ ÐµÐ³Ð¾ Ð² Ð¼Ð¾Ð¼ÐµÐ½Ñ, ÐºÐ¾Ð³Ð´Ð° ÐºÐ½Ð¾Ð¿ÐºÐ° Ð±ÑÐ´ÐµÑ Ð²Ð¿ÐµÑÐ²ÑÐµ ÑÐ°Ð·Ð¼ÐµÑÐµÐ½Ð°.\nÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ ÐµÐ³Ð¾ Ð¿ÑÐ¸ ÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ð¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ.'",
+                "readOnly": false,
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "chat_title"
+            ]
+          }
+        ]
+      },
+      "OpenAppButton": {
+        "description": "ÐÐ½Ð¾Ð¿ÐºÐ° Ð´Ð»Ñ Ð·Ð°Ð¿ÑÑÐºÐ° Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "web_app": {
+                "description": "ÐÑÐ±Ð»Ð¸ÑÐ½Ð¾Ðµ Ð¸Ð¼Ñ (username) Ð±Ð¾ÑÐ° Ð¸Ð»Ð¸ ÑÑÑÐ»ÐºÐ° Ð½Ð° Ð½ÐµÐ³Ð¾, ÑÑÑ Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð½Ð°Ð´Ð¾ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ",
+                "readOnly": false,
+                "type": "string"
+              },
+              "contact_id": {
+                "description": "ÐÐ´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð±Ð¾ÑÐ°, ÑÑÑ Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð½Ð°Ð´Ð¾ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ",
+                "readOnly": false,
+                "type": "integer",
+                "format": "int64"
+              },
+              "payload": {
+                "description": "ÐÐ°ÑÐ°Ð¼ÐµÑÑ Ð·Ð°Ð¿ÑÑÐºÐ°, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð±ÑÐ´ÐµÑ Ð¿ÐµÑÐµÐ´Ð°Ð½ Ð² [initData](/docs/webapps/bridge#WebAppData) Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+                "readOnly": false,
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "MessageButton": {
+        "description": "ÐÐ½Ð¾Ð¿ÐºÐ° Ð´Ð»Ñ Ð·Ð°Ð¿ÑÑÐºÐ° Ð¼Ð¸Ð½Ð¸-Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "text": {
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Ð¢ÐµÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÐ¸, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð±ÑÐ´ÐµÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½ Ð² ÑÐ°Ñ Ð¾Ñ Ð»Ð¸ÑÐ° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+                "readOnly": false,
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ClipboardButton": {
+        "description": "ÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÑ ÑÐºÐ°Ð·Ð°Ð½Ð½ÑÐ¹ ÑÐµÐºÑÑ ÐºÐ¾Ð¿Ð¸ÑÑÐµÑÑÑ Ð² Ð±ÑÑÐµÑ Ð¾Ð±Ð¼ÐµÐ½Ð°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Button"
+          },
+          {
+            "properties": {
+              "payload": {
+                "description": "Ð¢ÐµÐºÑÑ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ ÐºÐ¾Ð¿Ð¸ÑÑÐµÑÑÑ Ð² Ð±ÑÑÐµÑ Ð¾Ð±Ð¼ÐµÐ½Ð° Ð¿Ð¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÑ",
+                "type": "string"
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "Intent": {
+        "description": "ÐÐ°Ð¼ÐµÑÐµÐ½Ð¸Ðµ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+        "type": "string",
+        "enum": [
+          "positive",
+          "negative",
+          "default"
+        ]
+      },
+      "ReplyButton": {
+        "description": "After pressing this type of button client will send a message on behalf of user with given payload",
+        "properties": {
+          "text": {
+            "description": "ÐÐ¸Ð´Ð¸Ð¼ÑÐ¹ ÑÐµÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "payload": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+            "type": "string",
+            "maxLength": 1024,
+            "readOnly": false,
+            "nullable": true
+          }
+        },
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "message": "#/components/schemas/SendMessageButton",
+            "user_geo_location": "#/components/schemas/SendGeoLocationButton",
+            "user_contact": "#/components/schemas/SendContactButton"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SendMessageButton": {
+        "description": "After pressing this type of button client will send a message on behalf of user with given payload",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReplyButton"
+          }
+        ]
+      },
+      "SendGeoLocationButton": {
+        "description": "ÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÐºÐ»Ð¸ÐµÐ½Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð½Ð¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð³ÐµÐ¾Ð³ÑÐ°ÑÐ¸ÑÐµÑÐºÐ¾Ð³Ð¾ Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReplyButton"
+          },
+          {
+            "properties": {
+              "quick": {
+                "description": "ÐÑÐ»Ð¸ *true*, Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð¼ÐµÑÑÐ¾Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð±ÐµÐ· Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+                "readOnly": false,
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        ]
+      },
+      "SendContactButton": {
+        "description": "AÐÐ¾ÑÐ»Ðµ Ð½Ð°Ð¶Ð°ÑÐ¸Ñ Ð½Ð° ÑÐ°ÐºÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÐºÐ»Ð¸ÐµÐ½Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð½Ð¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ ÑÐµÐºÑÑÐµÐ³Ð¾ ÐºÐ¾Ð½ÑÐ°ÐºÑÐ° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReplyButton"
+          }
+        ]
+      },
+      "MessageLinkType": {
+        "description": "Ð¢Ð¸Ð¿ ÑÐ²ÑÐ·Ð°Ð½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "type": "string",
+        "enum": [
+          "forward",
+          "reply"
+        ]
+      },
+      "AttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð´Ð°Ð½Ð½ÑÑ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "image": "#/components/schemas/PhotoAttachmentRequest",
+            "video": "#/components/schemas/VideoAttachmentRequest",
+            "audio": "#/components/schemas/AudioAttachmentRequest",
+            "file": "#/components/schemas/FileAttachmentRequest",
+            "sticker": "#/components/schemas/StickerAttachmentRequest",
+            "contact": "#/components/schemas/ContactAttachmentRequest",
+            "inline_keyboard": "#/components/schemas/InlineKeyboardAttachmentRequest",
+            "location": "#/components/schemas/LocationAttachmentRequest",
+            "share": "#/components/schemas/ShareAttachmentRequest"
+          }
+        },
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "PhotoAttachmentRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PhotoAttachmentRequestPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "PhotoAttachmentRequestPayload": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ (Ð²ÑÐµ Ð¿Ð¾Ð»Ñ ÑÐ²Ð»ÑÑÑÑÑ Ð²Ð·Ð°Ð¸Ð¼Ð¾Ð¸ÑÐºÐ»ÑÑÐ°ÑÑÐ¸Ð¼Ð¸)",
+        "properties": {
+          "url": {
+            "description": "ÐÑÐ±Ð¾Ð¹ Ð²Ð½ÐµÑÐ½Ð¸Ð¹ URL Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ, ÐºÐ¾ÑÐ¾ÑÐ¾Ðµ Ð²Ñ ÑÐ¾ÑÐ¸ÑÐµ Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð¸ÑÑ",
+            "minLength": 1,
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          },
+          "token": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ ÑÑÑÐµÑÑÐ²ÑÑÑÐµÐ³Ð¾ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ",
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          },
+          "photos": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½Ñ, Ð¿Ð¾Ð»ÑÑÐµÐ½Ð½ÑÐµ Ð¿Ð¾ÑÐ»Ðµ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¹",
+            "nullable": true,
+            "readOnly": false,
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PhotoToken"
+            }
+          }
+        }
+      },
+      "PhotoToken": {
+        "properties": {
+          "token": {
+            "description": "ÐÐ°ÐºÐ¾Ð´Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð°Ñ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "PhotoTokens": {
+        "description": "Ð­ÑÐ¾ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ, ÐºÐ¾ÑÐ¾ÑÑÑ Ð²Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ Ð±ÑÐ´ÐµÑ Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð¾",
+        "properties": {
+          "photos": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PhotoToken"
+            }
+          }
+        },
+        "required": [
+          "photos"
+        ]
+      },
+      "VideoAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð²Ð¸Ð´ÐµÐ¾ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UploadedInfo"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "AudioAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð°ÑÐ´Ð¸Ð¾ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐÐÐÐÐ Ð±ÑÑÑ ÐµÐ´Ð¸Ð½ÑÑÐ²ÐµÐ½Ð½ÑÐ¼ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UploadedInfo"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "UploadedInfo": {
+        "description": "Ð­ÑÐ¾ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ, ÐºÐ¾ÑÐ¾ÑÑÑ Ð²Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð°ÑÐ´Ð¸Ð¾/Ð²Ð¸Ð´ÐµÐ¾ Ð±ÑÐ´ÐµÑ Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð¾",
+        "properties": {
+          "token": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ â ÑÐ½Ð¸ÐºÐ°Ð»ÑÐ½ÑÐ¹ ID Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð¼ÐµÐ´Ð¸Ð°ÑÐ°Ð¹Ð»Ð°",
+            "type": "string",
+            "readOnly": false
+          }
+        }
+      },
+      "FileAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÑÐ°Ð¹Ð»Ð° Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. ÐÐÐÐÐÐ Ð±ÑÑÑ ÐµÐ´Ð¸Ð½ÑÑÐ²ÐµÐ½Ð½ÑÐ¼ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UploadedInfo"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "UploadType": {
+        "description": "Ð¢Ð¸Ð¿ Ð·Ð°Ð³ÑÑÐ¶Ð°ÐµÐ¼Ð¾Ð³Ð¾ ÑÐ°Ð¹Ð»Ð°\n\nÐÐ¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÐ¼ÑÐµ ÑÐ¾ÑÐ¼Ð°ÑÑ:\n- `image`: JPG, JPEG, PNG, GIF, TIFF, BMP, HEIC\n- `video`: MP4, MOV, MKV, WEBM, MATROSKA  \n- `audio`: MP3, WAV, M4A Ð¸ Ð´ÑÑÐ³Ð¸Ðµ\n- `file`: Ð»ÑÐ±ÑÐµ ÑÐ¸Ð¿Ñ ÑÐ°Ð¹Ð»Ð¾Ð²\n\n> ÐÐ½Ð°ÑÐµÐ½Ð¸Ðµ `photo` Ð±Ð¾Ð»ÑÑÐµ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ. ÐÑÐ»Ð¸ Ð²Ñ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°Ð»Ð¸ `type=photo` Ð² ÑÐ°Ð½ÐµÐµ ÑÐ¾Ð·Ð´Ð°Ð½Ð½ÑÑ Ð¸Ð½ÑÐµÐ³ÑÐ°ÑÐ¸ÑÑ â Ð·Ð°Ð¼ÐµÐ½Ð¸ÑÐµ ÐµÐ³Ð¾ Ð½Ð° `type=image`",
+        "enum": [
+          "image",
+          "video",
+          "audio",
+          "file"
+        ]
+      },
+      "ContactAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÐºÐ°ÑÑÐ¾ÑÐºÐ¸ ÐºÐ¾Ð½ÑÐ°ÐºÑÐ° Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ. MÐÐÐÐÐÐ Ð±ÑÑÑ ÐµÐ´Ð¸Ð½ÑÑÐ²ÐµÐ½Ð½ÑÐ¼ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ContactAttachmentRequestPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "ContactAttachmentRequestPayload": {
+        "properties": {
+          "name": {
+            "description": "ÐÐ¼Ñ ÐºÐ¾Ð½ÑÐ°ÐºÑÐ°",
+            "nullable": true,
+            "type": "string"
+          },
+          "contact_id": {
+            "description": "ID ÐºÐ¾Ð½ÑÐ°ÐºÑÐ°, ÐµÑÐ»Ð¸ Ð¾Ð½ Ð·Ð°ÑÐµÐ³Ð¸ÑÑÐ¸ÑÐ¾Ð²Ð°Ð½ Ð² MAX",
+            "nullable": true,
+            "readOnly": false,
+            "type": "integer",
+            "format": "int64"
+          },
+          "vcf_info": {
+            "description": "ÐÐ¾Ð»Ð½Ð°Ñ Ð¸Ð½ÑÐ¾ÑÐ¼Ð°ÑÐ¸Ñ Ð¾ ÐºÐ¾Ð½ÑÐ°ÐºÑÐµ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ VCF",
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          },
+          "vcf_phone": {
+            "description": "Ð¢ÐµÐ»ÐµÑÐ¾Ð½ ÐºÐ¾Ð½ÑÐ°ÐºÑÐ° Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ VCF",
+            "readOnly": false,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "StickerAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ¸ÐºÐµÑÐ°. ÐÐÐÐÐÐ Ð±ÑÑÑ ÐµÐ´Ð¸Ð½ÑÑÐ²ÐµÐ½Ð½ÑÐ¼ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ Ð² ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StickerAttachmentRequestPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "StickerAttachmentRequestPayload": {
+        "properties": {
+          "code": {
+            "description": "ÐÐ¾Ð´ ÑÑÐ¸ÐºÐµÑÐ°",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "InlineKeyboardAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÑ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/InlineKeyboardAttachmentRequestPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "InlineKeyboardAttachmentRequestPayload": {
+        "properties": {
+          "buttons": {
+            "description": "ÐÐ²ÑÐ¼ÐµÑÐ½ÑÐ¹ Ð¼Ð°ÑÑÐ¸Ð² ÐºÐ½Ð¾Ð¿Ð¾Ðº",
+            "type": "array",
+            "minLength": 1,
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Button"
+              }
+            }
+          }
+        },
+        "required": [
+          "buttons"
+        ]
+      },
+      "ReplyKeyboardAttachmentRequest": {
+        "description": "Request to attach reply keyboard to message",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "direct": {
+                "description": "Applicable only for chats. If `true` keyboard will be shown only for user bot mentioned or replied",
+                "type": "boolean",
+                "default": false,
+                "readOnly": false
+              },
+              "direct_user_id": {
+                "description": "If set to `true`, reply keyboard will only be shown to this participant in chat",
+                "type": "integer",
+                "format": "int64",
+                "nullable": true,
+                "readOnly": false
+              },
+              "buttons": {
+                "description": "ÐÐ²ÑÐ¼ÐµÑÐ½ÑÐ¹ Ð¼Ð°ÑÑÐ¸Ð² ÐºÐ½Ð¾Ð¿Ð¾Ðº",
+                "type": "array",
+                "minLength": 1,
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReplyButton"
+                  }
+                }
+              }
+            },
+            "required": [
+              "buttons"
+            ]
+          }
+        ]
+      },
+      "LocationAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÑ Ðº ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "format": "double",
+                "description": "Ð¨Ð¸ÑÐ¾ÑÐ°"
+              },
+              "longitude": {
+                "type": "number",
+                "format": "double",
+                "description": "ÐÐ¾Ð»Ð³Ð¾ÑÐ°"
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ]
+          }
+        ]
+      },
+      "ShareAttachmentRequest": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð¿ÑÐ¸ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ðµ Ð¿ÑÐµÐ´Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ° Ð¼ÐµÐ´Ð¸Ð°ÑÐ°Ð¹Ð»Ð° Ð¿Ð¾ Ð²Ð½ÐµÑÐ½ÐµÐ¼Ñ URL",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AttachmentRequest"
+          },
+          {
+            "properties": {
+              "payload": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ShareAttachmentPayload"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          }
+        ]
+      },
+      "MarkupElement": {
+        "properties": {
+          "type": {
+            "description": "Ð¢Ð¸Ð¿ ÑÐ»ÐµÐ¼ÐµÐ½ÑÐ° ÑÐ°Ð·Ð¼ÐµÑÐºÐ¸. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ **Ð¶Ð¸ÑÐ½ÑÐ¹**,  *ÐºÑÑÑÐ¸Ð²*, ~Ð·Ð°ÑÐµÑÐºÐ½ÑÑÑÐ¹~, <ins>Ð¿Ð¾Ð´ÑÐµÑÐºÐ½ÑÑÑÐ¹</ins>, `Ð¼Ð¾Ð½Ð¾ÑÐ¸ÑÐ¸Ð½Ð½ÑÐ¹`, ÑÑÑÐ»ÐºÐ° Ð¸Ð»Ð¸ ÑÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ðµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+            "type": "string"
+          },
+          "from": {
+            "description": "ÐÐ½Ð´ÐµÐºÑ Ð½Ð°ÑÐ°Ð»Ð° ÑÐ»ÐµÐ¼ÐµÐ½ÑÐ° ÑÐ°Ð·Ð¼ÐµÑÐºÐ¸ Ð² ÑÐµÐºÑÑÐµ. ÐÑÐ¼ÐµÑÐ°ÑÐ¸Ñ Ñ Ð½ÑÐ»Ñ",
+            "type": "integer",
+            "format": "int32"
+          },
+          "length": {
+            "description": "ÐÐ»Ð¸Ð½Ð° ÑÐ»ÐµÐ¼ÐµÐ½ÑÐ° ÑÐ°Ð·Ð¼ÐµÑÐºÐ¸",
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "strong": "#/components/schemas/StrongMarkup",
+            "emphasized": "#/components/schemas/EmphasizedMarkup",
+            "monospaced": "#/components/schemas/MonospacedMarkup",
+            "link": "#/components/schemas/LinkMarkup",
+            "strikethrough": "#/components/schemas/StrikethroughMarkup",
+            "underline": "#/components/schemas/UnderlineMarkup",
+            "user_mention": "#/components/schemas/UserMentionMarkup"
+          }
+        },
+        "required": [
+          "type",
+          "from",
+          "length"
+        ]
+      },
+      "StrongMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ **Ð¶Ð¸ÑÐ½ÑÐ¹** ÑÐµÐºÑÑ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "EmphasizedMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ *ÐºÑÑÑÐ¸Ð²*",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "MonospacedMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ `Ð¼Ð¾Ð½Ð¾ÑÐ¸ÑÐ¸Ð½Ð½ÑÐ¹` Ð¸Ð»Ð¸ Ð±Ð»Ð¾Ðº ```ÐºÐ¾Ð´``` Ð² ÑÐµÐºÑÑÐµ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "LinkMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ ÑÑÑÐ»ÐºÑ Ð² ÑÐµÐºÑÑÐµ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          },
+          {
+            "properties": {
+              "url": {
+                "description": "URL ÑÑÑÐ»ÐºÐ¸",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        ]
+      },
+      "StrikethroughMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ ~Ð·Ð°ÑÐµÐºÑÐ½ÑÑÑÐ¹~ ÑÐµÐºÑÑ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "UnderlineMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ <ins>Ð¿Ð¾Ð´ÑÐµÑÐºÐ½ÑÑÑÐ¹</ins> ÑÐµÐºÑÑ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "HeadingMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÑÐµÐºÑÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "UserMentionMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ ÑÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ðµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐµÐºÑÑÐµ. Ð£Ð¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ðµ Ð¼Ð¾Ð¶ÐµÑ Ð±ÑÑÑ ÐºÐ°Ðº Ð¿Ð¾ Ð¸Ð¼ÐµÐ½Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÑÐ°Ðº Ð¸ Ð¿Ð¾ ID, ÐµÑÐ»Ð¸ Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½ÐµÑ Ð¸Ð¼ÐµÐ½Ð¸",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          },
+          {
+            "properties": {
+              "user_link": {
+                "description": "`@username` ÑÐ¿Ð¾Ð¼ÑÐ½ÑÑÐ¾Ð³Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              },
+              "user_id": {
+                "description": "ID ÑÐ¿Ð¾Ð¼ÑÐ½ÑÑÐ¾Ð³Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð±ÐµÐ· Ð¸Ð¼ÐµÐ½Ð¸",
+                "type": "integer",
+                "format": "int64",
+                "nullable": true,
+                "readOnly": false
+              }
+            }
+          }
+        ]
+      },
+      "HighlightedMarkup": {
+        "description": "ÐÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ Ð²ÑÐ´ÐµÐ»ÐµÐ½Ð½ÑÑ ÑÐ°ÑÑÑ ÑÐµÐºÑÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MarkupElement"
+          }
+        ]
+      },
+      "SubscriptionRequestBody": {
+        "description": "ÐÐ°Ð¿ÑÐ¾Ñ Ð½Ð° Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÑ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ WebHook",
+        "properties": {
+          "url": {
+            "description": "URL HTTPS-endpoint Ð²Ð°ÑÐµÐ³Ð¾ Ð±Ð¾ÑÐ°. ÐÐ¾Ð»Ð¶ÐµÐ½ Ð½Ð°ÑÐ¸Ð½Ð°ÑÑÑÑ Ñ `https://`",
+            "type": "string"
+          },
+          "update_types": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ÑÐ¸Ð¿Ð¾Ð² Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹, ÐºÐ¾ÑÐ¾ÑÑÐµ ÑÐ¾ÑÐµÑ Ð¿Ð¾Ð»ÑÑÐ°ÑÑ Ð²Ð°Ñ Ð±Ð¾Ñ. ÐÐ»Ñ Ð¿Ð¾Ð»Ð½Ð¾Ð³Ð¾ ÑÐ¿Ð¸ÑÐºÐ° ÑÐ¸Ð¿Ð¾Ð² ÑÐ¼. Ð¾Ð±ÑÐµÐºÑ [Update](/docs-api/objects/Update)",
+            "example": "[\"message_created\", \"bot_started\"]",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "readOnly": false
+          },
+          "secret": {
+            "description": "CÐµÐºÑÐµÑ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð±ÑÑÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½ Ð² Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐµ `X-Max-Bot-Api-Secret` Ð² ÐºÐ°Ð¶Ð´Ð¾Ð¼ Ð·Ð°Ð¿ÑÐ¾ÑÐµ Webhook. Ð Ð°Ð·ÑÐµÑÐµÐ½Ñ ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ¸Ð¼Ð²Ð¾Ð»Ñ `A-Z`, `a-z`, `0-9`, Ð¸ Ð´ÐµÑÐ¸Ñ. ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÑÐµÐºÐ¾Ð¼ÐµÐ½Ð´Ð¾Ð²Ð°Ð½, ÑÑÐ¾Ð±Ñ Ð·Ð°Ð¿ÑÐ¾Ñ Ð¿Ð¾ÑÑÑÐ¿Ð°Ð» Ð¸Ð· ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð²ÐµÐ±-ÑÐ·Ð»Ð°",
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 256,
+            "pattern": "^[a-zA-Z0-9_-]{5,256}$"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "GetSubscriptionsResult": {
+        "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð²ÑÐµÑ WebHook Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¾Ðº",
+        "properties": {
+          "subscriptions": {
+            "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº ÑÐµÐºÑÑÐ¸Ñ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐ¾Ðº",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Subscription"
+            }
+          }
+        },
+        "required": [
+          "subscriptions"
+        ]
+      },
+      "SimpleQueryResult": {
+        "description": "ÐÑÐ¾ÑÑÐ¾Ð¹ Ð¾ÑÐ²ÐµÑ Ð½Ð° Ð·Ð°Ð¿ÑÐ¾Ñ",
+        "properties": {
+          "success": {
+            "description": "`true`, ÐµÑÐ»Ð¸ Ð·Ð°Ð¿ÑÐ¾Ñ Ð±ÑÐ» ÑÑÐ¿ÐµÑÐ½ÑÐ¼, `false` â Ð² Ð¿ÑÐ¾ÑÐ¸Ð²Ð½Ð¾Ð¼ ÑÐ»ÑÑÐ°Ðµ",
+            "type": "boolean"
+          },
+          "message": {
+            "description": "ÐÐ±ÑÑÑÐ½Ð¸ÑÐµÐ»ÑÐ½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ, ÐµÑÐ»Ð¸ ÑÐµÐ·ÑÐ»ÑÑÐ°Ñ Ð½Ðµ Ð±ÑÐ» ÑÑÐ¿ÐµÑÐ½ÑÐ¼",
+            "type": "string",
+            "readOnly": false
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "PinMessageBody": {
+        "properties": {
+          "message_id": {
+            "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ, ÐºÐ¾ÑÐ¾ÑÐ¾Ðµ Ð½ÑÐ¶Ð½Ð¾ Ð·Ð°ÐºÑÐµÐ¿Ð¸ÑÑ. Ð¡Ð¾Ð¾ÑÐ²ÐµÑÑÑÐ²ÑÐµÑ Ð¿Ð¾Ð»Ñ `Message.body.mid`",
+            "type": "string"
+          },
+          "notify": {
+            "description": "ÐÑÐ»Ð¸ `true`, ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¸ Ð¿Ð¾Ð»ÑÑÐ°Ñ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ñ ÑÐ¸ÑÑÐµÐ¼Ð½ÑÐ¼ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸ÐµÐ¼ Ð¾ Ð·Ð°ÐºÑÐµÐ¿Ð»ÐµÐ½Ð¸Ð¸",
+            "type": "boolean",
+            "default": true,
+            "readOnly": false,
+            "nullable": true
+          }
+        },
+        "required": [
+          "message_id"
+        ]
+      },
+      "GetPinnedMessageResult": {
+        "properties": {
+          "message": {
+            "description": "ÐÐ°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ Ð² ÑÐ°ÑÐµ Ð½ÐµÑ Ð·Ð°ÐºÑÐµÐ¿Ð»ÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "readOnly": false,
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ]
+          }
+        }
+      },
+      "Callback": {
+        "description": "ÐÐ±ÑÐµÐºÑ, Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð½ÑÐ¹ Ð±Ð¾ÑÑ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð¸Ð¼Ð°ÐµÑ ÐºÐ½Ð¾Ð¿ÐºÑ",
+        "properties": {
+          "timestamp": {
+            "description": "Unix-Ð²ÑÐµÐ¼Ñ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð°Ð» ÐºÐ½Ð¾Ð¿ÐºÑ",
+            "type": "integer",
+            "format": "int64"
+          },
+          "callback_id": {
+            "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ID ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÑ",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Ð¢Ð¾ÐºÐµÐ½ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+            "type": "string",
+            "readOnly": false
+          },
+          "user": {
+            "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, Ð½Ð°Ð¶Ð°Ð²ÑÐ¸Ð¹ Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÑ",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ]
+          }
+        },
+        "required": [
+          "timestamp",
+          "callback_id",
+          "user"
+        ]
+      },
+      "CallbackAnswer": {
+        "description": "ÐÑÐ¿ÑÐ°Ð²ÑÑÐµ ÑÑÐ¾Ñ Ð¾Ð±ÑÐµÐºÑ, ÐºÐ¾Ð³Ð´Ð° Ð²Ð°Ñ Ð±Ð¾Ñ ÑÐ¾ÑÐµÑ Ð¾ÑÑÐµÐ°Ð³Ð¸ÑÐ¾Ð²Ð°ÑÑ Ð½Ð° Ð½Ð°Ð¶Ð°ÑÐ¸Ðµ ÐºÐ½Ð¾Ð¿ÐºÐ¸",
+        "properties": {
+          "message": {
+            "description": "ÐÐ°Ð¿Ð¾Ð»Ð½Ð¸ÑÐµ ÑÑÐ¾, ÐµÑÐ»Ð¸ ÑÐ¾ÑÐ¸ÑÐµ Ð¸Ð·Ð¼ÐµÐ½Ð¸ÑÑ ÑÐµÐºÑÑÐµÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+            "nullable": true,
+            "readOnly": false,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewMessageBody"
+              }
+            ]
+          },
+          "notification": {
+            "description": "ÐÐ°Ð¿Ð¾Ð»Ð½Ð¸ÑÐµ ÑÑÐ¾, ÐµÑÐ»Ð¸ ÑÐ¾ÑÐ¸ÑÐµ Ð¿ÑÐ¾ÑÑÐ¾ Ð¾ÑÐ¿ÑÐ°Ð²Ð¸ÑÑ Ð¾Ð´Ð½Ð¾ÑÐ°Ð·Ð¾Ð²Ð¾Ðµ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ",
+            "nullable": true,
+            "readOnly": false,
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "description": "Ð¡ÐµÑÐ²ÐµÑ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ ÑÑÐ¾, ÐµÑÐ»Ð¸ Ð²Ð¾Ð·Ð½Ð¸ÐºÐ»Ð¾ Ð¸ÑÐºÐ»ÑÑÐµÐ½Ð¸Ðµ Ð¿ÑÐ¸ Ð²Ð°ÑÐµÐ¼ Ð·Ð°Ð¿ÑÐ¾ÑÐµ",
+        "properties": {
+          "error": {
+            "description": "ÐÑÐ¸Ð±ÐºÐ°",
+            "type": "string"
+          },
+          "code": {
+            "description": "ÐÐ¾Ð´ Ð¾ÑÐ¸Ð±ÐºÐ¸",
+            "type": "string"
+          },
+          "message": {
+            "description": "Ð§Ð¸ÑÐ°ÐµÐ¼Ð¾Ðµ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¾ÑÐ¸Ð±ÐºÐ¸",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "UploadEndpoint": {
+        "description": "Ð¢Ð¾ÑÐºÐ° Ð´Ð¾ÑÑÑÐ¿Ð°, ÐºÑÐ´Ð° ÑÐ»ÐµÐ´ÑÐµÑ Ð·Ð°Ð³ÑÑÐ¶Ð°ÑÑ Ð²Ð°ÑÐ¸ Ð±Ð¸Ð½Ð°ÑÐ½ÑÐµ ÑÐ°Ð¹Ð»Ñ",
+        "type": "object",
+        "properties": {
+          "url": {
+            "description": "URL Ð´Ð»Ñ Ð·Ð°Ð³ÑÑÐ·ÐºÐ¸ ÑÐ°Ð¹Ð»Ð°. Ð¡ÑÐ¾Ðº Ð¶Ð¸Ð·Ð½Ð¸ ÑÑÑÐ»ÐºÐ¸ Ð½Ðµ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½",
+            "type": "string"
+          },
+          "token": {
+            "description": "ÐÐ¸Ð´ÐµÐ¾- Ð¸Ð»Ð¸ Ð°ÑÐ´Ð¸Ð¾-ÑÐ¾ÐºÐµÐ½ Ð´Ð»Ñ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¸ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "UserIdsList": {
+        "properties": {
+          "user_ids": {
+            "name": "user_ids",
+            "description": "ÐÐ°ÑÑÐ¸Ð² ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹ Ð´Ð»Ñ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð² ÑÐ°Ñ",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              }
+            },
+            "style": "simple"
+          }
+        },
+        "required": [
+          "user_ids"
+        ]
+      },
+      "ActionRequestBody": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SenderAction"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "SenderAction": {
+        "description": "ÐÐµÐ¹ÑÑÐ²Ð¸Ðµ, Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÐ¼Ð¾Ðµ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ°Ð¼ ÑÐ°ÑÐ°. ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ:\n- `\"typing_on\"` â ÐÐ¾Ñ Ð½Ð°Ð±Ð¸ÑÐ°ÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ.\n- `\"sending_photo\"` â ÐÐ¾Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ ÑÐ¾ÑÐ¾.\n- `\"sending_video\"` â ÐÐ¾Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð²Ð¸Ð´ÐµÐ¾.\n- `\"sending_audio\"` â ÐÐ¾Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ Ð°ÑÐ´Ð¸Ð¾ÑÐ°Ð¹Ð».\n-  `\"sending_file\"` â ÐÐ¾Ñ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÑÐµÑ ÑÐ°Ð¹Ð».\n- `\"mark_seen\"` â ÐÐ¾Ñ Ð¿Ð¾Ð¼ÐµÑÐ°ÐµÑ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ ÐºÐ°Ðº Ð¿ÑÐ¾ÑÐ¸ÑÐ°Ð½Ð½ÑÐµ.\n",
+        "enum": [
+          "typing_on",
+          "sending_photo",
+          "sending_video",
+          "sending_audio",
+          "sending_file",
+          "mark_seen"
+        ]
+      },
+      "UpdateList": {
+        "description": "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð²ÑÐµÑ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð² ÑÐ°ÑÐ°Ñ, Ð² ÐºÐ¾ÑÐ¾ÑÑÑ Ð²Ð°Ñ Ð±Ð¾Ñ ÑÑÐ°ÑÑÐ²Ð¾Ð²Ð°Ð»",
+        "properties": {
+          "updates": {
+            "description": "Ð¡ÑÑÐ°Ð½Ð¸ÑÐ° Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Update"
+            }
+          },
+          "marker": {
+            "description": "Ð£ÐºÐ°Ð·Ð°ÑÐµÐ»Ñ Ð½Ð° ÑÐ»ÐµÐ´ÑÑÑÑÑ ÑÑÑÐ°Ð½Ð¸ÑÑ Ð´Ð°Ð½Ð½ÑÑ",
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "required": [
+          "updates",
+          "marker"
+        ]
+      },
+      "Update": {
+        "description": "ÐÐ±ÑÐµÐºÑ`Update` Ð¿ÑÐµÐ´ÑÑÐ°Ð²Ð»ÑÐµÑ ÑÐ°Ð·Ð»Ð¸ÑÐ½ÑÐµ ÑÐ¸Ð¿Ñ ÑÐ¾Ð±ÑÑÐ¸Ð¹, Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐµÐ´ÑÐ¸Ñ Ð² ÑÐ°ÑÐµ. Ð¡Ð¼. ÐµÐ³Ð¾ Ð½Ð°ÑÐ»ÐµÐ´Ð½Ð¸ÐºÐ¾Ð²\n\n> Ð§ÑÐ¾Ð±Ñ Ð¿Ð¾Ð»ÑÑÐ°ÑÑ ÑÐ¾Ð±ÑÑÐ¸Ñ Ð¸Ð· Ð³ÑÑÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÑÐ°ÑÐ° Ð¸Ð»Ð¸ ÐºÐ°Ð½Ð°Ð»Ð°, Ð½Ð°Ð·Ð½Ð°ÑÑÑÐµ Ð±Ð¾ÑÐ° Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼",
+        "discriminator": {
+          "propertyName": "update_type",
+          "mapping": {
+            "message_created": "#/components/schemas/MessageCreatedUpdate",
+            "message_callback": "#/components/schemas/MessageCallbackUpdate",
+            "message_edited": "#/components/schemas/MessageEditedUpdate",
+            "message_removed": "#/components/schemas/MessageRemovedUpdate",
+            "bot_added": "#/components/schemas/BotAddedToChatUpdate",
+            "bot_removed": "#/components/schemas/BotRemovedFromChatUpdate",
+            "dialog_muted": "#/components/schemas/DialogMutedUpdate",
+            "dialog_unmuted": "#/components/schemas/DialogUnmutedUpdate",
+            "dialog_cleared": "#/components/schemas/DialogClearedUpdate",
+            "dialog_removed": "#/components/schemas/DialogRemovedUpdate",
+            "user_added": "#/components/schemas/UserAddedToChatUpdate",
+            "user_removed": "#/components/schemas/UserRemovedFromChatUpdate",
+            "bot_started": "#/components/schemas/BotStartedUpdate",
+            "bot_stopped": "#/components/schemas/BotStoppedUpdate",
+            "chat_title_changed": "#/components/schemas/ChatTitleChangedUpdate"
+          }
+        },
+        "properties": {
+          "update_type": {
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Unix-Ð²ÑÐµÐ¼Ñ, ÐºÐ¾Ð³Ð´Ð° Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "update_type",
+          "timestamp"
+        ]
+      },
+      "MessageCallbackUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ `update` ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð¼ÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "callback": {
+                "description": "",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Callback"
+                  }
+                ]
+              },
+              "message": {
+                "description": "ÐÐ·Ð½Ð°ÑÐ°Ð»ÑÐ½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ, ÑÐ¾Ð´ÐµÑÐ¶Ð°ÑÐµÐµ Ð²ÑÑÑÐ¾ÐµÐ½Ð½ÑÑ ÐºÐ»Ð°Ð²Ð¸Ð°ÑÑÑÑ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ Ð¾Ð½Ð¾ Ð±ÑÐ»Ð¾ ÑÐ´Ð°Ð»ÐµÐ½Ð¾ Ðº Ð¼Ð¾Ð¼ÐµÐ½ÑÑ, ÐºÐ¾Ð³Ð´Ð° Ð±Ð¾Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ð» ÑÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ",
+                "nullable": true,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Message"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              }
+            },
+            "required": [
+              "callback",
+              "message"
+            ]
+          }
+        ]
+      },
+      "MessageCreatedUpdate": {
+        "description": "Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ `update`, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ´ÐµÑ ÑÐ¾Ð·Ð´Ð°Ð½Ð¾",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "message": {
+                "description": "ÐÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Message"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47. ÐÐ¾ÑÑÑÐ¿Ð½Ð¾ ÑÐ¾Ð»ÑÐºÐ¾ Ð² Ð´Ð¸Ð°Ð»Ð¾Ð³Ð°Ñ",
+                "type": "string",
+                "readOnly": false,
+                "nullable": true
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        ]
+      },
+      "MessageRemovedUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ `update`, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ´ÐµÑ ÑÐ´Ð°Ð»ÐµÐ½Ð¾",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "message_id": {
+                "description": "ID ÑÐ´Ð°Ð»ÐµÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ",
+                "type": "string"
+              },
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ»Ð¾ ÑÐ´Ð°Ð»ÐµÐ½Ð¾",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user_id": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÑÐ´Ð°Ð»Ð¸Ð²ÑÐ¸Ð¹ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              }
+            },
+            "required": [
+              "message_id",
+              "chat_id",
+              "user_id"
+            ]
+          }
+        ]
+      },
+      "MessageEditedUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ `update`, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð±ÑÐ´ÐµÑ Ð¾ÑÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¾",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "message": {
+                "description": "ÐÑÑÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Message"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        ]
+      },
+      "BotAddedToChatUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ update, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð±Ð¾Ñ Ð±ÑÐ´ÐµÑ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÐ°Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, ÐºÑÐ´Ð° Ð±ÑÐ» Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð±Ð¾Ñ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, Ð´Ð¾Ð±Ð°Ð²Ð¸Ð²ÑÐ¸Ð¹ Ð±Ð¾ÑÐ° Ð² ÑÐ°Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "is_channel": {
+                "description": "Ð£ÐºÐ°Ð·ÑÐ²Ð°ÐµÑ, Ð±ÑÐ» Ð»Ð¸ Ð±Ð¾Ñ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÐºÐ°Ð½Ð°Ð» Ð¸Ð»Ð¸ Ð½ÐµÑ",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "is_channel"
+            ]
+          }
+        ]
+      },
+      "BotRemovedFromChatUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ update, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð±Ð¾Ñ Ð±ÑÐ´ÐµÑ ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð· ÑÐ°ÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð¾ÑÐºÑÐ´Ð° Ð±ÑÐ» ÑÐ´Ð°Ð»ÑÐ½ Ð±Ð¾Ñ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÑÐ´Ð°Ð»Ð¸Ð²ÑÐ¸Ð¹ Ð±Ð¾ÑÐ° Ð¸Ð· ÑÐ°ÑÐ°",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "is_channel": {
+                "description": "Ð£ÐºÐ°Ð·ÑÐ²Ð°ÐµÑ, Ð±ÑÐ» Ð»Ð¸ Ð±Ð¾Ñ ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð· ÐºÐ°Ð½Ð°Ð»Ð° Ð¸Ð»Ð¸ Ð½ÐµÑ",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "is_channel"
+            ]
+          }
+        ]
+      },
+      "DialogMutedUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ update, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð·Ð°Ð³Ð»ÑÑÐ¸Ñ Ð´Ð¸Ð°Ð»Ð¾Ð³ Ñ Ð±Ð¾ÑÐ¾Ð¼",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð¾ÑÐºÐ»ÑÑÐ¸Ð» ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "muted_until": {
+                "description": "ÐÑÐµÐ¼Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ Unix, Ð´Ð¾ Ð½Ð°ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ñ ÐºÐ¾ÑÐ¾ÑÐ¾Ð³Ð¾ Ð´Ð¸Ð°Ð»Ð¾Ð³ Ð±ÑÐ» Ð¾ÑÐºÐ»ÑÑÑÐ½",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "muted_until"
+            ]
+          }
+        ]
+      },
+      "DialogUnmutedUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ update, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð²ÐºÐ»ÑÑÐ¸Ñ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ Ð² Ð´Ð¸Ð°Ð»Ð¾Ð³Ðµ Ñ Ð±Ð¾ÑÐ¾Ð¼",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð²ÐºÐ»ÑÑÐ¸Ð» ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user"
+            ]
+          }
+        ]
+      },
+      "DialogClearedUpdate": {
+        "description": "ÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ°ÐµÑ ÑÑÐ¾Ñ ÑÐ¸Ð¿ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÑÑÐ°Ð·Ñ Ð¿Ð¾ÑÐ»Ðµ Ð¾ÑÐ¸ÑÑÐºÐ¸ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð´Ð¸Ð°Ð»Ð¾Ð³Ð°.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð²ÐºÐ»ÑÑÐ¸Ð» ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user"
+            ]
+          }
+        ]
+      },
+      "DialogRemovedUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾Ñ update, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ ÑÐ´Ð°Ð»ÑÐµÑ ÑÐ°Ñ",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ ÑÐ´Ð°Ð»Ð¸Ð» ÑÐ°Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user"
+            ]
+          }
+        ]
+      },
+      "UserAddedToChatUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð±ÑÐ´ÐµÑ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÐ°Ñ, Ð³Ð´Ðµ Ð±Ð¾Ñ ÑÐ²Ð»ÑÐµÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð½ÑÐ¹ Ð² ÑÐ°Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "inviter_id": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð´Ð¾Ð±Ð°Ð²Ð¸Ð» Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ°Ñ. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¿ÑÐ¸ÑÐ¾ÐµÐ´Ð¸Ð½Ð¸Ð»ÑÑ Ðº ÑÐ°ÑÑ Ð¿Ð¾ ÑÑÑÐ»ÐºÐµ",
+                "type": "integer",
+                "format": "int64",
+                "readOnly": false,
+                "nullable": true
+              },
+              "is_channel": {
+                "description": "Ð£ÐºÐ°Ð·ÑÐ²Ð°ÐµÑ, Ð±ÑÐ» Ð»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÐºÐ°Ð½Ð°Ð» Ð¸Ð»Ð¸ Ð½ÐµÑ",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "is_channel"
+            ]
+          }
+        ]
+      },
+      "UserRemovedFromChatUpdate": {
+        "description": "ÐÑ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ ÑÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ, ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð±ÑÐ´ÐµÑ ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð· ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð±Ð¾Ñ ÑÐ²Ð»ÑÐµÑÑÑ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÑÐ´Ð°Ð»ÑÐ½Ð½ÑÐ¹ Ð¸Ð· ÑÐ°ÑÐ°",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "admin_id": {
+                "description": "ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ ÑÐ´Ð°Ð»Ð¸Ð» Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¸Ð· ÑÐ°ÑÐ°. ÐÐ¾Ð¶ÐµÑ Ð±ÑÑÑ `null`, ÐµÑÐ»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¿Ð¾ÐºÐ¸Ð½ÑÐ» ÑÐ°Ñ ÑÐ°Ð¼",
+                "type": "integer",
+                "format": "int64",
+                "readOnly": false
+              },
+              "is_channel": {
+                "description": "Ð£ÐºÐ°Ð·ÑÐ²Ð°ÐµÑ, Ð±ÑÐ» Ð»Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð· ÐºÐ°Ð½Ð°Ð»Ð° Ð¸Ð»Ð¸ Ð½ÐµÑ",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "is_channel"
+            ]
+          }
+        ]
+      },
+      "BotStartedUpdate": {
+        "description": "ÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ°ÐµÑ ÑÑÐ¾Ñ ÑÐ¸Ð¿ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð°Ð» ÐºÐ½Ð¾Ð¿ÐºÑ `Start`",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID Ð´Ð¸Ð°Ð»Ð¾Ð³Ð°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð½Ð°Ð¶Ð°Ð» ÐºÐ½Ð¾Ð¿ÐºÑ 'Start'",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "payload": {
+                "description": "ÐÐ¾Ð¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½ÑÐµ Ð´Ð°Ð½Ð½ÑÐµ Ð¸Ð· Ð´Ð¸Ð¿-Ð»Ð¸Ð½ÐºÐ¾Ð², Ð¿ÐµÑÐµÐ´Ð°Ð½Ð½ÑÐµ Ð¿ÑÐ¸ Ð·Ð°Ð¿ÑÑÐºÐµ Ð±Ð¾ÑÐ°",
+                "type": "string",
+                "maxLength": 512,
+                "nullable": true,
+                "readOnly": false
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string",
+                "readOnly": false
+              }
+            },
+            "required": [
+              "chat_id",
+              "user"
+            ]
+          }
+        ]
+      },
+      "BotStoppedUpdate": {
+        "description": "ÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ°ÐµÑ ÑÑÐ¾Ñ ÑÐ¸Ð¿ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð¾ÑÑÐ°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÑ Ð±Ð¾ÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID Ð´Ð¸Ð°Ð»Ð¾Ð³Ð°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð¾ÑÑÐ°Ð½Ð¾Ð²Ð¸Ð» ÑÐ°Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "user_locale": {
+                "description": "Ð¢ÐµÐºÑÑÐ¸Ð¹ ÑÐ·ÑÐº Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð² ÑÐ¾ÑÐ¼Ð°ÑÐµ IETF BCP 47",
+                "type": "string",
+                "readOnly": false
+              }
+            },
+            "required": [
+              "chat_id",
+              "user"
+            ]
+          }
+        ]
+      },
+      "ChatTitleChangedUpdate": {
+        "description": "BÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ñ ÑÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ, ÐºÐ¾Ð³Ð´Ð° Ð±ÑÐ´ÐµÑ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ ÑÐ°ÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat_id": {
+                "description": "ID ÑÐ°ÑÐ°, Ð³Ð´Ðµ Ð¿ÑÐ¾Ð¸Ð·Ð¾ÑÐ»Ð¾ ÑÐ¾Ð±ÑÑÐ¸Ðµ",
+                "type": "integer",
+                "format": "int64"
+              },
+              "user": {
+                "description": "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ, ÐºÐ¾ÑÐ¾ÑÑÐ¹ Ð¸Ð·Ð¼ÐµÐ½Ð¸Ð» Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ]
+              },
+              "title": {
+                "description": "ÐÐ¾Ð²Ð¾Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "user",
+              "title"
+            ]
+          }
+        ]
+      },
+      "MessageChatCreatedUpdate": {
+        "description": "ÐÐ¾Ñ Ð¿Ð¾Ð»ÑÑÐ¸Ñ ÑÑÐ¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ, ÐºÐ¾Ð³Ð´Ð° ÑÐ°Ñ Ð±ÑÐ´ÐµÑ ÑÐ¾Ð·Ð´Ð°Ð½, ÐºÐ°Ðº ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÐµÑÐ²ÑÐ¹ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ð°Ð¶Ð¼ÑÑ ÐºÐ½Ð¾Ð¿ÐºÑ ÑÐ°ÑÐ°",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Update"
+          },
+          {
+            "properties": {
+              "chat": {
+                "description": "Ð¡Ð¾Ð·Ð´Ð°Ð½Ð½ÑÐ¹ ÑÐ°Ñ",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Chat"
+                  }
+                ]
+              },
+              "message_id": {
+                "description": "ID ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ, Ð³Ð´Ðµ Ð±ÑÐ»Ð° Ð½Ð°Ð¶Ð°ÑÐ° ÐºÐ½Ð¾Ð¿ÐºÐ°",
+                "type": "string"
+              },
+              "start_payload": {
+                "description": "ÐÐ¾Ð»ÐµÐ·Ð½Ð°Ñ Ð½Ð°Ð³ÑÑÐ·ÐºÐ° Ð¾Ñ ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÐ°ÑÐ°",
+                "type": "string",
+                "nullable": true,
+                "readOnly": false
+              }
+            },
+            "required": [
+              "message_id",
+              "chat"
+            ]
+          }
+        ]
+      },
+      "ModifyMembersResult": {
+        "description": "Ð ÐµÐ·ÑÐ»ÑÑÐ°Ñ Ð·Ð°Ð¿ÑÐ¾ÑÐ° Ð½Ð° Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ ÑÐ¿Ð¸ÑÐºÐ° ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð²",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SimpleQueryResult"
+          },
+          {
+            "properties": {
+              "failed_user_ids": {
+                "description": "ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹, ÐºÐ¾ÑÐ¾ÑÑÑ Ð½Ðµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð´Ð¾Ð±Ð°Ð²Ð¸ÑÑ",
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "nullable": true,
+                "readOnly": false
+              },
+              "failed_user_details": {
+                "description": "ÐÐ¾Ð´ÑÐ¾Ð±Ð½Ð¾Ðµ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ, Ð¿Ð¾ÑÐµÐ¼Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ðµ Ð±ÑÐ» Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÐ°Ñ",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FailedUserDetails"
+                },
+                "nullable": true,
+                "readOnly": false
+              }
+            }
+          }
+        ]
+      },
+      "FailedUserDetails": {
+        "description": "ÐÐ¾Ð´ÑÐ¾Ð±Ð½Ð¾Ðµ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ, Ð¿Ð¾ÑÐµÐ¼Ñ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ Ð½Ðµ Ð±ÑÐ» Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÐ°Ñ",
+        "properties": {
+          "error_code": {
+            "description": "ÐÐ¾Ð´ Ð¾ÑÐ¸Ð±ÐºÐ¸\n\nÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ:\n\n- `add.participant.privacy` â Ð¾ÑÐ¸Ð±ÐºÐ¸ ÐºÐ¾Ð½ÑÐ¸Ð´ÐµÐ½ÑÐ¸Ð°Ð»ÑÐ½Ð¾ÑÑÐ¸ Ð¿ÑÐ¸ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ð¸ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹\n\n- `add.participant.not.found` â Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ñ",
+            "type": "string"
+          },
+          "user_ids": {
+            "description": "ID Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹ Ñ Ð´Ð°Ð½Ð½Ð¾Ð¹ Ð¾ÑÐ¸Ð±ÐºÐ¾Ð¹",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": false
+          }
+        },
+        "required": [
+          "error_code",
+          "user_ids"
+        ]
+      }
+    }
+  }
+}

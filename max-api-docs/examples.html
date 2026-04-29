@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Code Examples - MAX Bot API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+        
+        .lang-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .lang {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+            background: #2d2d2d;
+            user-select: none;
+        }
+        
+        .lang:hover {
+            background: #3d3d3d;
+            transform: translateY(-2px);
+        }
+        
+        .lang.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .example-card {
+            background: #252526;
+            border-radius: 8px;
+            overflow: hidden;
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .example-title {
+            background: #2d2d2d;
+            padding: 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #3d3d3d;
+            color: #4CAF50;
+        }
+        
+        .example-desc {
+            padding: 10px 15px;
+            background: #2d2d2d;
+            color: #888;
+            font-size: 0.9em;
+            border-bottom: 1px solid #3d3d3d;
+        }
+        
+        pre {
+            background: #1e1e1e;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 0;
+        }
+        
+        code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        
+        .copy-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+            margin: 10px;
+            float: right;
+        }
+        
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        
+        @media (max-width: 768px) {
+            .examples-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💻 MAX Bot API - Code Examples</h1>
+        <div class="subtitle">10 практических примеров для каждого языка программирования</div>
+        
+        <div class="lang-tabs">
+            <div class="lang" data-lang="python">🐍 Python</div>
+            <div class="lang" data-lang="javascript">🟨 JavaScript</div>
+            <div class="lang" data-lang="curl">📡 cURL</div>
+            <div class="lang" data-lang="php">🐘 PHP</div>
+            <div class="lang" data-lang="go">🔷 Go</div>
+            <div class="lang" data-lang="java">☕ Java</div>
+        </div>
+        
+        <div id="examples-container">Loading examples...</div>
+    </div>
+
+    <script>
+        // Простые примеры для тестирования
+        const examplesData = {
+            python: [
+                { title: "1. Получение информации о боте", desc: "GET /me - Базовая информация", code: "import requests\n\nurl = 'https://dev.max.ru/me'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.get(url, headers=headers)\nprint(response.json())" },
+                { title: "2. Отправка сообщения", desc: "POST /chats/{chatId}/messages", code: "import requests\n\nchat_id = '123456'\nurl = f'https://dev.max.ru/chats/{chat_id}/messages'\nheaders = {\n    'Authorization': 'Bearer YOUR_TOKEN',\n    'Content-Type': 'application/json'\n}\ndata = {'text': 'Hello from bot!'}\n\nresponse = requests.post(url, json=data, headers=headers)\nprint(response.status_code)" },
+                { title: "3. Получение списка чатов", desc: "GET /chats", code: "import requests\n\nurl = 'https://dev.max.ru/chats'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.get(url, headers=headers)\nchats = response.json()\nfor chat in chats:\n    print(chat['name'])" },
+                { title: "4. Получение сообщений", desc: "GET /chats/{chatId}/messages", code: "import requests\n\nchat_id = '123456'\nurl = f'https://dev.max.ru/chats/{chat_id}/messages'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.get(url, headers=headers)\nmessages = response.json()\nfor msg in messages:\n    print(f\"{msg['user']}: {msg['text']}\")" },
+                { title: "5. Загрузка файла", desc: "POST /chats/{chatId}/files", code: "import requests\n\nchat_id = '123456'\nurl = f'https://dev.max.ru/chats/{chat_id}/files'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\nfiles = {'file': open('document.pdf', 'rb')}\n\nresponse = requests.post(url, files=files, headers=headers)\nprint(response.json())" },
+                { title: "6. Информация о пользователе", desc: "GET /users/{userId}", code: "import requests\n\nuser_id = '789012'\nurl = f'https://dev.max.ru/users/{user_id}'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.get(url, headers=headers)\nuser = response.json()\nprint(f\"Name: {user['name']}, Phone: {user['phone']}\")" },
+                { title: "7. Создание кнопок", desc: "POST /chats/{chatId}/keyboard", code: "import requests\n\nchat_id = '123456'\nurl = f'https://dev.max.ru/chats/{chat_id}/keyboard'\nheaders = {\n    'Authorization': 'Bearer YOUR_TOKEN',\n    'Content-Type': 'application/json'\n}\ndata = {\n    'buttons': [\n        {'text': 'Кнопка 1', 'action': 'action1'},\n        {'text': 'Кнопка 2', 'action': 'action2'}\n    ]\n}\n\nresponse = requests.post(url, json=data, headers=headers)\nprint(response.status_code)" },
+                { title: "8. Удаление сообщения", desc: "DELETE /chats/{chatId}/messages/{messageId}", code: "import requests\n\nchat_id = '123456'\nmessage_id = 'msg_789'\nurl = f'https://dev.max.ru/chats/{chat_id}/messages/{message_id}'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.delete(url, headers=headers)\nprint(f'Deleted: {response.status_code == 200}')" },
+                { title: "9. Статистика бота", desc: "GET /me/stats", code: "import requests\n\nurl = 'https://dev.max.ru/me/stats'\nheaders = {'Authorization': 'Bearer YOUR_TOKEN'}\n\nresponse = requests.get(url, headers=headers)\nstats = response.json()\nprint(f\"Messages sent: {stats['total_messages']}\")\nprint(f\"Active chats: {stats['active_chats']}\")" },
+                { title: "10. Webhook сервер", desc: "Flask webhook", code: "from flask import Flask, request\nimport requests\n\napp = Flask(__name__)\n\n@app.route('/webhook', methods=['POST'])\ndef webhook():\n    data = request.json\n    chat_id = data['chat_id']\n    message = data['message']\n    \n    url = f'https://dev.max.ru/chats/{chat_id}/messages'\n    headers = {'Authorization': 'Bearer YOUR_TOKEN'}\n    response = requests.post(url, json={'text': f'Echo: {message}'}, headers=headers)\n    \n    return 'OK', 200\n\nif __name__ == '__main__':\n    app.run(port=5000)" }
+            ],
+            javascript: [
+                { title: "1. Получение информации о боте", desc: "GET /me", code: "fetch('https://dev.max.ru/me', {\n    headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n})\n.then(res => res.json())\n.then(data => console.log(data))\n.catch(err => console.error(err));" },
+                { title: "2. Отправка сообщения", desc: "POST /chats/{chatId}/messages", code: "const chatId = '123456';\nconst message = 'Hello from bot!';\n\nfetch(`https://dev.max.ru/chats/${chatId}/messages`, {\n    method: 'POST',\n    headers: {\n        'Authorization': 'Bearer YOUR_TOKEN',\n        'Content-Type': 'application/json'\n    },\n    body: JSON.stringify({ text: message })\n})\n.then(res => res.json())\n.then(data => console.log('Sent:', data));" },
+                { title: "3. Получение чатов", desc: "GET /chats", code: "async function getChats() {\n    const response = await fetch('https://dev.max.ru/chats', {\n        headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n    });\n    const chats = await response.json();\n    chats.forEach(chat => console.log(chat.name));\n}\ngetChats();" },
+                { title: "4. Получение сообщений", desc: "GET /chats/{chatId}/messages", code: "async function getMessages(chatId) {\n    const response = await fetch(`https://dev.max.ru/chats/${chatId}/messages`, {\n        headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n    });\n    const messages = await response.json();\n    messages.forEach(msg => console.log(`${msg.user}: ${msg.text}`));\n}\ngetMessages('123456');" },
+                { title: "5. Загрузка файла", desc: "POST /chats/{chatId}/files", code: "const chatId = '123456';\nconst formData = new FormData();\nformData.append('file', fileInput.files[0]);\n\nfetch(`https://dev.max.ru/chats/${chatId}/files`, {\n    method: 'POST',\n    headers: { 'Authorization': 'Bearer YOUR_TOKEN' },\n    body: formData\n})\n.then(res => res.json())\n.then(data => console.log('Uploaded:', data));" },
+                { title: "6. Информация о пользователе", desc: "GET /users/{userId}", code: "async function getUser(userId) {\n    const response = await fetch(`https://dev.max.ru/users/${userId}`, {\n        headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n    });\n    const user = await response.json();\n    console.log(`Name: ${user.name}, Phone: ${user.phone}`);\n}\ngetUser('789012');" },
+                { title: "7. Создание кнопок", desc: "POST /chats/{chatId}/keyboard", code: "const chatId = '123456';\nconst keyboard = {\n    buttons: [\n        { text: 'Кнопка 1', action: 'action1' },\n        { text: 'Кнопка 2', action: 'action2' }\n    ]\n};\n\nfetch(`https://dev.max.ru/chats/${chatId}/keyboard`, {\n    method: 'POST',\n    headers: {\n        'Authorization': 'Bearer YOUR_TOKEN',\n        'Content-Type': 'application/json'\n    },\n    body: JSON.stringify(keyboard)\n});" },
+                { title: "8. Удаление сообщения", desc: "DELETE", code: "const chatId = '123456';\nconst messageId = 'msg_789';\n\nfetch(`https://dev.max.ru/chats/${chatId}/messages/${messageId}`, {\n    method: 'DELETE',\n    headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n})\n.then(res => console.log(`Deleted: ${res.ok}`));" },
+                { title: "9. Статистика", desc: "GET /me/stats", code: "async function getStats() {\n    const response = await fetch('https://dev.max.ru/me/stats', {\n        headers: { 'Authorization': 'Bearer YOUR_TOKEN' }\n    });\n    const stats = await response.json();\n    console.log(`Messages: ${stats.total_messages}`);\n    console.log(`Chats: ${stats.active_chats}`);\n}\ngetStats();" },
+                { title: "10. Webhook сервер", desc: "Express.js", code: "const express = require('express');\nconst app = express();\napp.use(express.json());\n\napp.post('/webhook', async (req, res) => {\n    const { chat_id, message } = req.body;\n    \n    await fetch(`https://dev.max.ru/chats/${chat_id}/messages`, {\n        method: 'POST',\n        headers: {\n            'Authorization': 'Bearer YOUR_TOKEN',\n            'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({ text: `Echo: ${message}` })\n    });\n    \n    res.send('OK');\n});\n\napp.listen(3000, () => console.log('Webhook running'));" }
+            ],
+            curl: [
+                { title: "1. GET /me", desc: "Информация о боте", code: "curl -X GET https://dev.max.ru/me \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "2. POST /chats/{chatId}/messages", desc: "Отправка сообщения", code: "curl -X POST https://dev.max.ru/chats/123456/messages \\\n  -H \"Authorization: Bearer YOUR_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"text\":\"Hello from bot!\"}'" },
+                { title: "3. GET /chats", desc: "Список чатов", code: "curl -X GET https://dev.max.ru/chats \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "4. GET /chats/{chatId}/messages", desc: "Сообщения чата", code: "curl -X GET https://dev.max.ru/chats/123456/messages \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "5. POST /chats/{chatId}/files", desc: "Загрузка файла", code: "curl -X POST https://dev.max.ru/chats/123456/files \\\n  -H \"Authorization: Bearer YOUR_TOKEN\" \\\n  -F \"file=@document.pdf\"" },
+                { title: "6. GET /users/{userId}", desc: "Информация о пользователе", code: "curl -X GET https://dev.max.ru/users/789012 \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "7. POST /chats/{chatId}/keyboard", desc: "Создание кнопок", code: "curl -X POST https://dev.max.ru/chats/123456/keyboard \\\n  -H \"Authorization: Bearer YOUR_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"buttons\":[{\"text\":\"Кнопка 1\",\"action\":\"action1\"}]}'" },
+                { title: "8. DELETE /chats/{chatId}/messages/{messageId}", desc: "Удаление сообщения", code: "curl -X DELETE https://dev.max.ru/chats/123456/messages/msg_789 \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "9. GET /me/stats", desc: "Статистика", code: "curl -X GET https://dev.max.ru/me/stats \\\n  -H \"Authorization: Bearer YOUR_TOKEN\"" },
+                { title: "10. Сохранение в файл", desc: "Скачать результат", code: "curl -X GET https://dev.max.ru/me \\\n  -H \"Authorization: Bearer YOUR_TOKEN\" \\\n  -o response.json\n\ncat response.json" }
+            ],
+            php: [
+                { title: "1. GET /me", desc: "Информация о боте", code: "<?php\n$ch = curl_init('https://dev.max.ru/me');\ncurl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer YOUR_TOKEN']);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n$response = curl_exec($ch);\n$data = json_decode($response, true);\nprint_r($data);\ncurl_close($ch);\n?>" },
+                { title: "2. POST /chats/{chatId}/messages", desc: "Отправка сообщения", code: "<?php\n$chatId = '123456';\n$url = \"https://dev.max.ru/chats/$chatId/messages\";\n$data = ['text' => 'Hello from bot!'];\n\n$ch = curl_init($url);\ncurl_setopt($ch, CURLOPT_POST, true);\ncurl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));\ncurl_setopt($ch, CURLOPT_HTTPHEADER, [\n    'Authorization: Bearer YOUR_TOKEN',\n    'Content-Type: application/json'\n]);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n$response = curl_exec($ch);\ncurl_close($ch);\n?>" }
+            ],
+            go: [
+                { title: "1. GET /me", desc: "Информация о боте", code: "package main\n\nimport (\n    \"fmt\"\n    \"io\"\n    \"net/http\"\n)\n\nfunc main() {\n    url := \"https://dev.max.ru/me\"\n    req, _ := http.NewRequest(\"GET\", url, nil)\n    req.Header.Set(\"Authorization\", \"Bearer YOUR_TOKEN\")\n    \n    client := &http.Client{}\n    resp, err := client.Do(req)\n    if err != nil {\n        panic(err)\n    }\n    defer resp.Body.Close()\n    \n    body, _ := io.ReadAll(resp.Body)\n    fmt.Println(string(body))\n}" }
+            ],
+            java: [
+                { title: "1. GET /me", desc: "Информация о боте", code: "import java.net.http.HttpClient;\nimport java.net.http.HttpRequest;\nimport java.net.http.HttpResponse;\nimport java.net.URI;\n\npublic class MaxBotAPI {\n    public static void main(String[] args) throws Exception {\n        HttpClient client = HttpClient.newHttpClient();\n        HttpRequest request = HttpRequest.newBuilder()\n            .uri(URI.create(\"https://dev.max.ru/me\"))\n            .header(\"Authorization\", \"Bearer YOUR_TOKEN\")\n            .GET()\n            .build();\n        \n        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());\n        System.out.println(response.body());\n    }\n}" }
+            ]
+        };
+        
+        function renderExamples(lang) {
+            const container = document.getElementById('examples-container');
+            const examples = examplesData[lang];
+            
+            if (!examples) {
+                container.innerHTML = '<div style="color: red;">Error: No examples found for ' + lang + '</div>';
+                return;
+            }
+            
+            let html = '<div class="examples-grid">';
+            for (let i = 0; i < examples.length; i++) {
+                const ex = examples[i];
+                html += `
+                    <div class="example-card">
+                        <div class="example-title">${ex.title}</div>
+                        <div class="example-desc">${ex.desc}</div>
+                        <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                        <pre><code>${escapeHtml(ex.code)}</code></pre>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        function escapeHtml(text) {
+            return text.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        
+        function copyCode(btn) {
+            const codeElement = btn.parentElement.querySelector('code');
+            const code = codeElement.innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = '✅ Copied!';
+                setTimeout(() => btn.innerText = originalText, 2000);
+            });
+        }
+        
+        // Добавляем обработчики после загрузки страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            // Загружаем Python по умолчанию
+            renderExamples('python');
+            
+            // Добавляем обработчики для табов
+            const tabs = document.querySelectorAll('.lang');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].addEventListener('click', function() {
+                    // Убираем активный класс у всех
+                    for (let j = 0; j < tabs.length; j++) {
+                        tabs[j].classList.remove('active');
+                    }
+                    // Добавляем активный класс текущему
+                    this.classList.add('active');
+                    // Рендерим примеры
+                    const lang = this.getAttribute('data-lang');
+                    renderExamples(lang);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>API Status - MAX Bot</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            margin-top: 0;
+            text-align: center;
+        }
+        .status-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .online {
+            background: #4CAF50;
+            color: white;
+        }
+        .offline {
+            background: #f44336;
+            color: white;
+        }
+        .checking {
+            background: #ff9800;
+            color: white;
+        }
+        .metric {
+            font-size: 2em;
+            margin: 10px 0;
+        }
+        .refresh-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .info {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 MAX Bot API Status Monitor</h1>
+        
+        <div class="status-card">
+            <h3>🌐 API Service</h3>
+            <div id="api-status" class="metric">Checking...</div>
+            <div id="api-badge" class="status-badge checking">Checking</div>
+        </div>
+        
+        <div class="status-card">
+            <h3>⚡ Response Time</h3>
+            <div id="response-time" class="metric">-- ms</div>
+        </div>
+        
+        <div class="status-card">
+            <h3>📅 Last Check</h3>
+            <div id="last-check">--</div>
+        </div>
+        
+        <button class="refresh-btn" onclick="checkStatus()">🔄 Check Now</button>
+        
+        <div class="info">
+            <p>💡 Note: Some endpoints may require authorization.<br>
+            This check verifies if the API server is reachable.</p>
+        </div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            const statusDiv = document.getElementById('api-status');
+            const badgeDiv = document.getElementById('api-badge');
+            const timeDiv = document.getElementById('response-time');
+            const checkDiv = document.getElementById('last-check');
+            
+            statusDiv.innerHTML = '⏳';
+            badgeDiv.innerHTML = 'Checking...';
+            badgeDiv.className = 'status-badge checking';
+            
+            const start = Date.now();
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                // Проверяем главную страницу API документации
+                const response = await fetch('https://dev.max.ru/docs-api', {
+                    signal: controller.signal,
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                
+                clearTimeout(timeoutId);
+                const end = Date.now();
+                const time = end - start;
+                
+                if (response.ok || response.status === 404) {
+                    statusDiv.innerHTML = '✅ ONLINE';
+                    badgeDiv.innerHTML = 'Online';
+                    badgeDiv.className = 'status-badge online';
+                    timeDiv.innerHTML = `${time} ms`;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '❌ OFFLINE';
+                badgeDiv.innerHTML = 'Offline';
+                badgeDiv.className = 'status-badge offline';
+                timeDiv.innerHTML = '-- ms';
+            }
+            
+            checkDiv.innerHTML = new Date().toLocaleString();
+        }
+        
+        // Запускаем при загрузке
+        checkStatus();
+        // Проверяем каждую минуту
+        setInterval(checkStatus, 60000);
+    </script>
+</body>
+</html>
