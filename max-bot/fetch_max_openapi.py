@@ -79,11 +79,10 @@ def main():
     if not spec:
         raise RuntimeError("OpenAPI спецификация не найдена!")
 
-    output = json.dumps(spec, ensure_ascii=False, indent=2)
     with open(OUTPUT, "w", encoding="utf-8") as f:
-        f.write(output)
+        json.dump(spec, f, ensure_ascii=False, indent=2)
 
-    print(f"3. Сохранено в {OUTPUT} ({len(output)/1024:.1f} KB)")
+    print(f"3. Сохранено в {OUTPUT}")
     print(f"   Путей: {len(spec.get('paths', {}))}")
     print(f"   Схем: {len(spec.get('components', {}).get('schemas', {}))}")
 
